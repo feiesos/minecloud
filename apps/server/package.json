@@ -1,0 +1,26 @@
+{
+  "name": "@minecloud/server",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "mvn:clean": "mvnw.cmd clean -f pom.xml",
+    "mvn:validate": "mvnw.cmd validate -f pom.xml",
+    "mvn:compile": "mvnw.cmd compile -f pom.xml",
+    "mvn:test": "mvnw.cmd test -f pom.xml",
+    "mvn:package": "mvnw.cmd package -f pom.xml",
+    "mvn:verify": "mvnw.cmd verify -f pom.xml",
+    "mvn:install": "mvnw.cmd install -f pom.xml",
+    "mvn:deploy": "mvnw.cmd deploy -f pom.xml",
+    "mvn:test:skip": "mvnw.cmd package -DskipTests -f pom.xml",
+    "mvn:clean:install": "mvnw.cmd clean install -f pom.xml",
+    "mvn:clean:package": "mvnw.cmd clean package -f pom.xml",
+    "mvn:dependency:tree": "mvnw.cmd dependency:tree -f pom.xml",
+    "mvn:auth:run": "mvnw.cmd spring-boot:run -pl auth -f pom.xml",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module"
+}

@@ -1,6 +1,7 @@
 packages:
   - 'packages/*'
   - 'apps/*'
+  - 'infra/*'
   # 排除所有test和node_modules目录
   - '!**/test/**'
   - '!**/node_modules/**'
