@@ -1,0 +1,14 @@
+server:
+  port: 8081
+
+mybatis-plus:
+  configuration:
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl # 开发环境打印 SQL
+    map-underscore-to-camel-case: true
+
+  global-config:
+    db-config:
+      id-type: assign_id # 使用雪花算法
+      logic-delete-field: deleted
+      logic-delete-value: "true"
+      logic-not-delete-value: "false"

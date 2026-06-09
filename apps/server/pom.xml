@@ -14,6 +14,7 @@
         <module>services</module>
         <module>common</module>
         <module>api</module>
+        <module>gateway</module>
     </modules>
     <groupId>org.feiesos</groupId>
     <artifactId>server</artifactId>
