@@ -1,12 +1,21 @@
 server:
   port: 8080
 
+jwt:
+  secret: org-feiesos-gateway-jwt-secret-key-must-be-at-least-32-bytes
+  expire: 86400
+
 spring:
   cloud:
     gateway:
       routes:
-        - id: auth-service
+        - id: auth
           uri: http://localhost:8081
-
-        - id: storage-service
+          predicates:
+            - Path=/api/v1/auth/**
+        - id: storage
           uri: http://localhost:8082
+          predicates:
+            - Path=/api/v1/files/**
+  main:
+    web-application-type: reactive

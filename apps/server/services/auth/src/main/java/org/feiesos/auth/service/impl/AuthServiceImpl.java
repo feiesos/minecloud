@@ -16,6 +16,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
+import java.time.OffsetDateTime;
 import java.util.UUID;
 import java.util.regex.Pattern;
 
@@ -88,8 +89,11 @@ public class AuthServiceImpl implements AuthService {
     @Override
     @Transactional
     public void verifyEmail(String token) {
-        System.out.println("---------------verifying email--------------");
+        System.out.println("-------------verifying email--------------");
         SysUser user = userMapper.findByVerificationToken(token);
+        if (user.getVerifiedAt() != null && user.getVerifiedAt().isBefore(OffsetDateTime.now())) {
+            throw new BusinessException("邮箱已被验证");
+        }
         if (user == null) {
             throw new BusinessException("验证令牌无效或已过期");
         }
