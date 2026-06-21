@@ -29,3 +29,6 @@ minecloud:
     upload-path: ./data/storage
     chunk:
       temp-dir: temp
+    recycle:
+      retention-days: 30             # 回收站文件保留天数，超过自动清理
+      cleanup-cron: "0 0 3 * * ?"    # 每天凌晨3点执行清理

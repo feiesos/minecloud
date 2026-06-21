@@ -7,6 +7,7 @@ import org.feiesos.common.result.R;
 import org.feiesos.storage.backend.StorageFacade;
 import org.feiesos.storage.dto.FileItemResponse;
 import org.feiesos.storage.dto.StorageObject;
+import org.feiesos.storage.recycle.service.RecycleService;
 import org.feiesos.storage.entity.FileNode;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -15,9 +16,11 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
+import java.net.URLConnection;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Map;
 
 @Slf4j
 @RestController
@@ -25,9 +28,11 @@ import java.util.List;
 public class FileController {
 
     private final StorageFacade storageFacade;
+    private final RecycleService recycleService;
 
-    public FileController(StorageFacade storageFacade) {
+    public FileController(StorageFacade storageFacade, RecycleService recycleService) {
         this.storageFacade = storageFacade;
+        this.recycleService = recycleService;
     }
 
     @GetMapping("/list")
@@ -165,11 +170,115 @@ public class FileController {
         }
     }
 
+    @GetMapping("/{id}")
+    public R<FileNode> detail(@PathVariable Long id, HttpServletRequest request) {
+        try {
+            Long userId = getUserId(request);
+            return R.ok(storageFacade.getFileDetail(id, userId));
+        } catch (BusinessException e) {
+            return R.fail(e.getCode(), e.getMessage());
+        } catch (Exception e) {
+            log.error("获取文件详情失败, id: {}", id, e);
+            return R.fail("文件不存在");
+        }
+    }
+
+    @PutMapping("/{id}/rename")
+    public R<FileNode> rename(@PathVariable Long id,
+                               @RequestBody Map<String, String> body,
+                               HttpServletRequest request) {
+        try {
+            String newName = body.get("name");
+            if (newName == null || newName.trim().isEmpty()) {
+                return R.fail("名称不能为空");
+            }
+            Long userId = getUserId(request);
+            return R.ok(storageFacade.rename(id, newName.trim(), userId));
+        } catch (BusinessException e) {
+            return R.fail(e.getCode(), e.getMessage());
+        } catch (Exception e) {
+            log.error("重命名失败, id: {}", id, e);
+            return R.fail("重命名失败: " + e.getMessage());
+        }
+    }
+
+    @PostMapping("/{id}/move")
+    public R<FileNode> move(@PathVariable Long id,
+                             @RequestBody Map<String, Long> body,
+                             HttpServletRequest request) {
+        try {
+            Long targetParentId = body.get("targetParentId");
+            if (targetParentId == null) {
+                return R.fail("目标目录不能为空");
+            }
+            Long userId = getUserId(request);
+            return R.ok(storageFacade.move(id, targetParentId, userId));
+        } catch (BusinessException e) {
+            return R.fail(e.getCode(), e.getMessage());
+        } catch (Exception e) {
+            log.error("移动文件失败, id: {}", id, e);
+            return R.fail("移动失败: " + e.getMessage());
+        }
+    }
+
+    @PostMapping("/{id}/copy")
+    public R<FileNode> copy(@PathVariable Long id,
+                             @RequestBody Map<String, Long> body,
+                             HttpServletRequest request) {
+        try {
+            Long targetParentId = body.get("targetParentId");
+            if (targetParentId == null) {
+                return R.fail("目标目录不能为空");
+            }
+            Long userId = getUserId(request);
+            return R.ok(storageFacade.copy(id, targetParentId, userId));
+        } catch (BusinessException e) {
+            return R.fail(e.getCode(), e.getMessage());
+        } catch (Exception e) {
+            log.error("复制文件失败, id: {}", id, e);
+            return R.fail("复制失败: " + e.getMessage());
+        }
+    }
+
+    @GetMapping("/{id}/preview")
+    public ResponseEntity<StreamingResponseBody> preview(@PathVariable Long id,
+                                                          HttpServletRequest request) {
+        try {
+            Long userId = getUserId(request);
+            StorageObject storageObj = storageFacade.download(id, userId);
+
+            String mimeType = URLConnection.guessContentTypeFromName(storageObj.getFilename());
+            if (mimeType == null) {
+                mimeType = "application/octet-stream";
+            }
+
+            StreamingResponseBody body = outputStream -> {
+                try (storageObj) {
+                    storageObj.getInputStream().transferTo(outputStream);
+                }
+            };
+
+            return ResponseEntity.ok()
+                    .header(HttpHeaders.CONTENT_DISPOSITION, "inline")
+                    .contentType(MediaType.parseMediaType(mimeType))
+                    .contentLength(storageObj.getSize())
+                    .body(body);
+        } catch (BusinessException e) {
+            if (e.getCode() == 403) {
+                return ResponseEntity.status(403).build();
+            }
+            return ResponseEntity.notFound().build();
+        } catch (Exception e) {
+            log.error("预览文件失败, id: {}", id, e);
+            return ResponseEntity.notFound().build();
+        }
+    }
+
     @DeleteMapping("/{id}")
     public R<String> delete(@PathVariable Long id, HttpServletRequest request) {
         try {
             Long userId = getUserId(request);
-            storageFacade.delete(id, userId);
+            recycleService.moveToRecycleBin(id, userId);
             return R.ok("已移入回收站");
         } catch (BusinessException e) {
             return R.fail(e.getCode(), e.getMessage());

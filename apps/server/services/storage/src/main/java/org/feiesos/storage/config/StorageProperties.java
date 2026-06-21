@@ -11,6 +11,7 @@ public class StorageProperties {
     private String uploadPath = "./data/storage";
     private StorageType defaultType = StorageType.LOCAL;
     private Chunk chunk = new Chunk();
+    private Recycle recycle = new Recycle();
 
     public String getUploadPath() {
         return uploadPath;
@@ -36,6 +37,14 @@ public class StorageProperties {
         this.chunk = chunk;
     }
 
+    public Recycle getRecycle() {
+        return recycle;
+    }
+
+    public void setRecycle(Recycle recycle) {
+        this.recycle = recycle;
+    }
+
     public static class Chunk {
         private String tempDir = "temp";
 
@@ -45,6 +54,27 @@ public class StorageProperties {
 
         public void setTempDir(String tempDir) {
             this.tempDir = tempDir;
+        }
+    }
+
+    public static class Recycle {
+        private int retentionDays = 30;
+        private String cleanupCron = "0 0 3 * * ?";
+
+        public int getRetentionDays() {
+            return retentionDays;
+        }
+
+        public void setRetentionDays(int retentionDays) {
+            this.retentionDays = retentionDays;
+        }
+
+        public String getCleanupCron() {
+            return cleanupCron;
+        }
+
+        public void setCleanupCron(String cleanupCron) {
+            this.cleanupCron = cleanupCron;
         }
     }
 }

@@ -1,7 +1,6 @@
 package org.feiesos.storage.backend;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import org.feiesos.common.exception.BusinessException;
 import org.feiesos.storage.config.StorageProperties;
 import org.feiesos.storage.entity.FileNode;
@@ -21,6 +20,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
 
 @Component
@@ -95,6 +95,7 @@ public class StorageFacade {
         if (!userId.equals(node.getOwnerId())) {
             throw new BusinessException(403, "无权访问该文件");
         }
+        ensureAncestorsAccessible(node, userId);
         StorageBackend backend = router.route(node);
         return backend.read(node.getStoragePath());
     }
@@ -276,6 +277,192 @@ public class StorageFacade {
         node.setCreateTime(LocalDateTime.now());
         fileNodeMapper.insert(node);
         return node;
+    }
+
+    public FileNode getFileDetail(Long fileId, Long userId) {
+        authzService.checkPermission(userId, "file:read");
+        FileNode node = fileNodeMapper.selectById(fileId);
+        if (node == null) {
+            throw new BusinessException("文件不存在");
+        }
+        if (!userId.equals(node.getOwnerId())) {
+            throw new BusinessException(403, "无权访问该文件");
+        }
+        return node;
+    }
+
+    @Transactional
+    public FileNode move(Long fileId, Long targetParentId, Long userId) {
+        authzService.checkPermission(userId, "file:write");
+
+        FileNode node = fileNodeMapper.selectById(fileId);
+        if (node == null) {
+            throw new BusinessException("文件不存在");
+        }
+        assertOwnership(node, userId);
+
+        validateTargetParent(targetParentId, userId);
+
+        if (Boolean.TRUE.equals(node.getIsDir())) {
+            if (Objects.equals(fileId, targetParentId)) {
+                throw new BusinessException("不能将目录移动到自身");
+            }
+            if (isDescendant(targetParentId, fileId)) {
+                throw new BusinessException("不能将目录移动到其子目录中");
+            }
+        }
+
+        checkNameConflict(node.getName(), targetParentId, fileId, userId);
+
+        node.setParentId(targetParentId);
+        fileNodeMapper.updateById(node);
+        return fileNodeMapper.selectById(fileId);
+    }
+
+    @Transactional
+    public FileNode copy(Long fileId, Long targetParentId, Long userId) {
+        authzService.checkPermission(userId, "file:write");
+
+        FileNode source = fileNodeMapper.selectById(fileId);
+        if (source == null) {
+            throw new BusinessException("文件不存在");
+        }
+        if (!userId.equals(source.getOwnerId())) {
+            throw new BusinessException(403, "无权操作该文件");
+        }
+
+        validateTargetParent(targetParentId, userId);
+        checkNameConflict(source.getName(), targetParentId, null, userId);
+
+        if (Boolean.TRUE.equals(source.getIsDir())) {
+            return copyDirectory(source, targetParentId, userId);
+        }
+        return copyFile(source, targetParentId, userId);
+    }
+
+    @Transactional
+    public FileNode rename(Long fileId, String newName, Long userId) {
+        authzService.checkPermission(userId, "file:write");
+
+        FileNode node = fileNodeMapper.selectById(fileId);
+        if (node == null) {
+            throw new BusinessException("文件不存在");
+        }
+        assertOwnership(node, userId);
+
+        checkNameConflict(newName, node.getParentId(), fileId, userId);
+
+        node.setName(newName);
+        fileNodeMapper.updateById(node);
+        return fileNodeMapper.selectById(fileId);
+    }
+
+    private void assertOwnership(FileNode node, Long userId) {
+        if (!userId.equals(node.getOwnerId())) {
+            throw new BusinessException(403, "无权操作该文件");
+        }
+    }
+
+    private void validateTargetParent(Long parentId, Long userId) {
+        if (parentId == 0L) return;
+        FileNode parent = fileNodeMapper.selectById(parentId);
+        if (parent == null) {
+            throw new BusinessException("目标目录不存在");
+        }
+        if (!Boolean.TRUE.equals(parent.getIsDir())) {
+            throw new BusinessException("目标路径不是目录");
+        }
+        if (!userId.equals(parent.getOwnerId())) {
+            throw new BusinessException(403, "无权操作目标目录");
+        }
+    }
+
+    private void checkNameConflict(String name, Long parentId, Long excludeId, Long userId) {
+        LambdaQueryWrapper<FileNode> wrapper = new LambdaQueryWrapper<FileNode>()
+                .eq(FileNode::getParentId, parentId)
+                .eq(FileNode::getName, name)
+                .eq(FileNode::getIsDeleted, false);
+        if (excludeId != null) {
+            wrapper.ne(FileNode::getId, excludeId);
+        }
+        if (fileNodeMapper.selectCount(wrapper) > 0) {
+            throw new BusinessException("目标目录下已存在同名文件或文件夹");
+        }
+    }
+
+    private boolean isDescendant(Long nodeId, Long potentialAncestorId) {
+        Long currentId = nodeId;
+        while (currentId != null && currentId != 0L) {
+            if (currentId.equals(potentialAncestorId)) {
+                return true;
+            }
+            FileNode node = fileNodeMapper.selectById(currentId);
+            if (node == null) break;
+            currentId = node.getParentId();
+        }
+        return false;
+    }
+
+    private FileNode copyFile(FileNode source, Long targetParentId, Long userId) {
+        StorageBackend backend = router.route(source);
+        StorageObject storageObj = backend.read(source.getStoragePath());
+
+        String newStoragePath = UUID.randomUUID().toString() + "_" + source.getName();
+        try {
+            backend.write(newStoragePath, storageObj.getInputStream(), storageObj.getSize());
+        } finally {
+            try { storageObj.close(); } catch (IOException ignored) {}
+        }
+
+        FileNode copy = new FileNode();
+        copy.setName(source.getName());
+        copy.setParentId(targetParentId);
+        copy.setIsDir(false);
+        copy.setSize(source.getSize());
+        copy.setFileHash(source.getFileHash());
+        copy.setStoragePath(newStoragePath);
+        copy.setStorageType(backend.type().name());
+        copy.setOwnerId(userId);
+        copy.setCreateTime(LocalDateTime.now());
+        fileNodeMapper.insert(copy);
+        return copy;
+    }
+
+    private FileNode copyDirectory(FileNode source, Long targetParentId, Long userId) {
+        FileNode newDir = new FileNode();
+        newDir.setName(source.getName());
+        newDir.setParentId(targetParentId);
+        newDir.setIsDir(true);
+        newDir.setSize(0L);
+        newDir.setOwnerId(userId);
+        newDir.setCreateTime(LocalDateTime.now());
+        fileNodeMapper.insert(newDir);
+
+        List<FileNode> children = fileNodeMapper.selectList(new LambdaQueryWrapper<FileNode>()
+                .eq(FileNode::getParentId, source.getId())
+                .eq(FileNode::getIsDeleted, false));
+        for (FileNode child : children) {
+            if (Boolean.TRUE.equals(child.getIsDir())) {
+                copyDirectory(child, newDir.getId(), userId);
+            } else {
+                copyFile(child, newDir.getId(), userId);
+            }
+        }
+        return newDir;
+    }
+
+    private void ensureAncestorsAccessible(FileNode node, Long userId) {
+        Long parentId = node.getParentId();
+        while (parentId != null && parentId != 0L) {
+            FileNode parent = fileNodeMapper.selectByIdIncludingDeleted(parentId);
+            if (parent == null || Boolean.TRUE.equals(parent.getIsDeleted())) {
+                throw new BusinessException("文件不存在");
+            }
+            if (!userId.equals(parent.getOwnerId())) {
+                throw new BusinessException(403, "无权访问该文件");
+            }
+            parentId = parent.getParentId();
+        }
     }
 
     private String chunkTempDir(Long userId) {
