@@ -27,7 +27,8 @@ public class JwtAuthGatewayFilter implements GlobalFilter, Ordered {
             "/api/v1/auth/login",
             "/api/v1/auth/verify-email",
             "/api/v1/auth/resend-verification",
-            "/api/v1/auth/refresh"
+            "/api/v1/auth/refresh",
+            "/api/v1/auth/permission/check"
     );
 
     private final JwtTokenProvider jwtTokenProvider;
