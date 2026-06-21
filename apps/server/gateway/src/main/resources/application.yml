@@ -13,7 +13,7 @@ spring:
         - id: auth
           uri: http://localhost:8081
           predicates:
-            - Path=/api/v1/auth/**
+            - Path=/api/v1/auth/**,/api/v1/admin/**
         - id: storage
           uri: http://localhost:8082
           predicates:
