@@ -4,10 +4,16 @@ import org.feiesos.api.auth.dto.LoginRequest;
 import org.feiesos.api.auth.dto.LoginResponse;
 import org.feiesos.api.auth.dto.RegisterRequest;
 import org.feiesos.api.auth.dto.RegisterResponse;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import org.feiesos.auth.entity.SysRefreshToken;
+import org.feiesos.auth.entity.SysRole;
 import org.feiesos.auth.entity.SysUser;
+import org.feiesos.auth.entity.UserRole;
+import org.feiesos.auth.mapper.PermissionMapper;
 import org.feiesos.auth.mapper.RefreshTokenMapper;
+import org.feiesos.auth.mapper.SysRoleMapper;
 import org.feiesos.auth.mapper.UserMapper;
+import org.feiesos.auth.mapper.UserRoleMapper;
 import org.feiesos.auth.service.AuthService;
 import org.feiesos.auth.service.RateLimitService;
 import org.feiesos.common.exception.BusinessException;
@@ -37,6 +43,9 @@ public class AuthServiceImpl implements AuthService {
 
     private final UserMapper userMapper;
     private final RefreshTokenMapper refreshTokenMapper;
+    private final PermissionMapper permissionMapper;
+    private final SysRoleMapper sysRoleMapper;
+    private final UserRoleMapper userRoleMapper;
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider jwtTokenProvider;
     private final JwtProperties jwtProperties;
@@ -44,12 +53,18 @@ public class AuthServiceImpl implements AuthService {
 
     public AuthServiceImpl(UserMapper userMapper,
                            RefreshTokenMapper refreshTokenMapper,
+                           PermissionMapper permissionMapper,
+                           SysRoleMapper sysRoleMapper,
+                           UserRoleMapper userRoleMapper,
                            PasswordEncoder passwordEncoder,
                            JwtTokenProvider jwtTokenProvider,
                            JwtProperties jwtProperties,
                            RateLimitService rateLimitService) {
         this.userMapper = userMapper;
         this.refreshTokenMapper = refreshTokenMapper;
+        this.permissionMapper = permissionMapper;
+        this.sysRoleMapper = sysRoleMapper;
+        this.userRoleMapper = userRoleMapper;
         this.passwordEncoder = passwordEncoder;
         this.jwtTokenProvider = jwtTokenProvider;
         this.jwtProperties = jwtProperties;
@@ -86,6 +101,8 @@ public class AuthServiceImpl implements AuthService {
         user.setVerificationTokenExpireAt(OffsetDateTime.now().plusHours(24));
 
         userMapper.insert(user);
+
+        assignDefaultRole(user.getId());
 
         rateLimitService.recordAttempt(registerKey);
 
@@ -230,5 +247,24 @@ public class AuthServiceImpl implements AuthService {
                 .username(user.getUsername())
                 .nickname(user.getNickname())
                 .build();
+    }
+
+    @Override
+    public boolean checkPermission(Long userId, String permissionCode) {
+        if (userId == null || permissionCode == null) {
+            return false;
+        }
+        return permissionMapper.countPermission(userId, permissionCode) > 0;
+    }
+
+    private void assignDefaultRole(Long userId) {
+        SysRole defaultRole = sysRoleMapper.selectOne(
+                new LambdaQueryWrapper<SysRole>().eq(SysRole::getCode, "user"));
+        if (defaultRole != null) {
+            UserRole userRole = new UserRole();
+            userRole.setUserId(userId);
+            userRole.setRoleId(defaultRole.getId());
+            userRoleMapper.insert(userRole);
+        }
     }
 }

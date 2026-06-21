@@ -16,4 +16,6 @@ public interface AuthService {
     RegisterResponse resendVerification(String email);
 
     LoginResponse refreshToken(String refreshToken);
+
+    boolean checkPermission(Long userId, String permissionCode);
 }

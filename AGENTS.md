@@ -1,249 +1,192 @@
-提示词（写进CLAUDE.md或AGENT.md的）：
-你正在参与开发一个企业级私有云平台项目，请在后续设计、编码和架构决策中始终遵循以下背景和约束。
+# AGENTS.md — Minecloud
 
-项目概述
+## Architecture overview
 
-本项目是一个基于 React + Spring Boot 的现代化私有云平台，采用 pnpm + Turborepo 管理的 Monorepo 架构。
+Monorepo managed by **pnpm workspaces** (no Turborepo configured yet, despite the plan).
+Two halves connected by a Spring Cloud Gateway:
 
-项目目标不仅是实现传统网盘功能，还将逐步扩展为集：
+- **Frontend**: `apps/web/` — React 19 + Vite 8 + TypeScript 6 (boilerplate only, not integrated yet)
+- **Backend**: `apps/server/` — Spring Boot 3.5.14 + Maven multi-module (Java 21)
 
-- 文件存储与管理
-- 文件共享
-- 本地挂载
-- 在线预览与编辑
-- OCR
-- RAG 知识库
-- AI Agent
-- 自动化工作流
+The Gateway is **not** a separate top-level app. It lives inside the Maven reactor at `apps/server/gateway/` and routes to the two backend services.
 
-于一体的智能私有云平台。
+```
+Browser → :8080 (Gateway) → :8081 (auth) or :8082 (storage)
+```
 
-后续可能支持桌面客户端、CLI、插件系统、多节点部署等能力。
+## Maven module tree (under apps/server/)
 
-Monorepo 结构
+```
+server (root POM)
+├── api/          — shared DTOs (auth/dto/, storage/dto/)
+├── common/       — JWT, R<> wrapper, BusinessException, CORS, GlobalExceptionHandler
+├── gateway/      — Spring Cloud Gateway (port 8080, reactive)
+└── services/     — aggregator POM
+    ├── auth/     — login, register, JWT, RBAC (port 8081)
+    └── storage/  — file CRUD, chunked upload, directory tree (port 8082)
+```
 
-apps/
+## Current status vs. future plan
 
-- web：React 主前端
-- admin：管理后台
-- server：Spring Boot 核心业务服务
-- gateway：统一网关
-- agent-service：Agent 服务
-- rag-service：RAG 服务
-- ocr-service：OCR 服务
-- preview-service：文件预览服务
+**What exists and works:**
+- Auth: register (with email verification token), login, JWT access+refresh, RBAC entities (sys_user, sys_role, sys_permission, join tables), permission-check API endpoint for service-to-service calls
+- Storage: upload, chunked upload + MD5 merge, download, delete (soft-delete with recursive child cleanup), mkdir, browse/path-resolution; directory tree via `file_node.parent_id`
+- `StorageBackend` interface with a working `LocalStorageBackend`; `S3StorageBackend` and `MountStorageBackend` are stubs (registered as beans so `StorageRouter` can discover them)
+- `StorageRouter` selects backends per-file based on `FileNode.storageType` with log warnings on fallback
+- Service-to-service permission checks: storage calls auth via Feign (`AuthClient`) instead of raw SQL joins
 
-packages/
+**Not yet implemented:**
+- share, recycle bin UI/API, search, admin UI
+- Redis, MinIO (docker-compose has only PostgreSQL)
+- OCR, RAG, Agent services (entirely not started)
+- Tests, CI/CD, Dockerfiles
 
-- sdk：前后端共享接口定义
-- types：公共类型
-- utils：公共工具
-- protocol：事件与通信协议
+## Essential commands
 
-当前开发重点
+All commands run from repo root unless noted.
 
-当前优先开发 Spring Boot 核心业务服务（server）。
+### Start PostgreSQL (required before running backend)
 
-目标是先完成：
+```bash
+pnpm --filter @minecloud/docker docker:up
+```
 
-- 用户系统
-- 认证授权
-- 文件管理
-- 对象存储抽象
-- 文件上传下载
-- 分享功能
-- 回收站
-- 基础搜索
+### Build the entire backend
 
-后续再逐步接入 OCR、RAG、Agent 等 AI 能力。
+```bash
+# Use the Maven wrapper directly (the package.json scripts hardcode mvnw.cmd — Windows-only)
+./apps/server/mvnw clean compile -f apps/server/pom.xml
+```
 
-后端架构原则
+To build a single module (faster for verification):
 
-遵循：
+```bash
+./apps/server/mvnw compile -pl services/auth -am -f apps/server/pom.xml
+```
 
-- DDD 思想（适度，不追求过度设计）
-- 模块化单体优先
-- 高内聚低耦合
-- 面向接口编程
-- 领域能力可独立拆分为微服务
+### Run individual services
 
-禁止直接将所有业务堆积到 Controller 或 Service 中。
+Each service is a `@SpringBootApplication`. Run from the server directory:
 
-技术栈
+```bash
+./apps/server/mvnw spring-boot:run -pl gateway -f apps/server/pom.xml
+./apps/server/mvnw spring-boot:run -pl services/auth -f apps/server/pom.xml
+./apps/server/mvnw spring-boot:run -pl services/storage -f apps/server/pom.xml
+```
 
-Java 21
+Or from within each module directory:
 
-Spring Boot 3.x
+```bash
+cd apps/server/gateway && ../../mvnw spring-boot:run
+```
 
-Spring Security
+### Frontend
 
-JWT
+```bash
+pnpm --filter @minecloud/web dev     # Vite dev server
+pnpm --filter @minecloud/web lint    # ESLint
+pnpm --filter @minecloud/web build   # tsc + vite build
+```
 
-MyBatis Plus
+## Gotchas and quirks
 
-PostgreSQL
+### Storage path is Windows-hardcoded
+`apps/server/services/storage/src/main/resources/application.yml` has `minecloud.storage.upload-path: D:/minecloud/data/`. On Linux/macOS this will fail. Change it to `/opt/minecloud/data` or a local path before running.
 
-Redis
+### Maven wrapper package.json scripts are Windows-only
+`apps/server/package.json` scripts all use `mvnw.cmd`. On Linux/macOS use `./apps/server/mvnw` directly instead.
 
-MinIO
-
-Docker
-
-Maven
-
-核心模块
-
-auth
-
-负责：
-
-- 登录
-- 注册
-- 邮箱验证
-- JWT签发
-- Refresh Token
-- RBAC权限控制
-
-典型表：
-
-- sys_user
-- sys_role
-- sys_permission
-- sys_user_role
-- sys_role_permission
-- sys_refresh_token
-
-storage
-
-负责：
-
-- 文件上传
-- 文件下载
-- 文件删除
-- 文件移动
-- 文件复制
-- 文件预览
-- 文件元数据管理
-
-该模块是整个系统核心。
-
-必须实现存储抽象层。
-
-禁止业务代码直接操作本地文件系统或 MinIO SDK。
-
-统一定义：
-
-StorageProvider
-
-接口。
-
-后续支持：
-
-- Local Storage
-- MinIO
-- S3
-- WebDAV
-- SMB
-
-等存储后端。
-
-file
-
-负责文件元数据管理。
-
-数据库仅保存元数据：
-
-- 文件名
-- 文件大小
-- MIME
-- Hash
-- Storage Key
-- 创建时间
-- 修改时间
-
-实际文件由 StorageProvider 管理。
-
-share
-
-负责：
-
-- 文件分享
-- 提取码
-- 分享链接
-- 访问控制
-
-search
-
-负责：
-
-- 文件名搜索
-- 标签搜索
-- 内容搜索（后续）
-
-recycle
-
-负责：
-
-- 软删除
-- 回收站恢复
-- 定时清理
-
-文件系统设计原则
-
-数据库保存元数据。
-
-对象存储保存实际文件。
-
-业务层不得直接依赖具体存储实现。
-
-统一通过：
-
-StorageProvider
-
-接口访问存储。
-
-AI 能力设计原则
-
-AI 能力不是核心业务的一部分。
-
-Agent、OCR、RAG 必须独立服务。
-
-Spring Boot 仅负责：
-
-- 用户
-- 权限
-- 文件
-- 任务调度
-- API
-
-AI 服务通过 HTTP、MQ 或 RPC 集成。
-
-禁止将 OCR、Embedding、LLM 调用逻辑直接写入核心业务模块。
-
-编码要求
-
-生成代码时优先考虑：
-
-- 可维护性
-- 可扩展性
-- 清晰的模块边界
-- 接口抽象
-- 单元测试友好
-
-避免：
-
-- 上帝类
-- 巨型 Service
-- 工具类泛滥
-- 魔法字符串
-- 硬编码
-
-新增功能时优先思考：
-
-1. 属于哪个模块？
-2. 是否应该定义接口？
-3. 是否会影响未来扩展？
-4. 是否符合存储抽象设计？
-5. 是否符合 RBAC 权限体系？
-
-请始终以企业级长期演进项目的标准进行设计与实现。
+### Logical delete field name is inconsistent
+- Auth entities: field name `deleted` (`logic-delete-field: deleted`)
+- Storage entity (`FileNode`): field name `isDeleted` (`logic-delete-field: isDeleted`)
+
+When adding new entities, match the module's convention. Do NOT unify them unless refactoring both modules.
+
+### JWT secret is hardcoded and duplicated
+The same JWT secret appears in both `gateway/src/main/resources/application.yml` and `services/auth/src/main/resources/application.yml`. Changes must be kept in sync.
+
+### User context is passed via request attribute
+The gateway filter (`JwtAuthGatewayFilter`) parses the JWT and sets `X-User-Id` and `X-Username` headers on the downstream request. Storage's `UserContextFilter` reads these headers and converts them to request attributes (`currentUserId`, `currentUsername`). Storage controllers read `currentUserId` via `request.getAttribute("currentUserId")`. No Spring Security context is propagated to downstream services. New controllers must follow this pattern.
+
+### Service-to-service permission checks use Feign
+Storage checks permissions by calling auth via Feign (`AuthClient` at `org.feiesos.storage.client`), not by querying auth tables directly. The auth module exposes `GET /api/v1/auth/permission/check?userId=X&permissionCode=Y`. The Feign client URL is configured via `minecloud.auth.url` (default `http://localhost:8081`). When adding new permission checks in storage, use `AuthzService.checkPermission()` — never query sys_role/sys_permission tables from storage.
+
+### Chunk uploads are user-isolated
+Chunks are stored under `{chunk.temp-dir}/{userId}/{md5}/{index}`. The temp dir is configurable via `minecloud.storage.chunk.temp-dir` (default `temp`). Both `uploadChunk` and `mergeChunks` require authentication and are scoped to the authenticated user.
+
+### DB credentials are hardcoded
+All `application.yml` files use `postgres/postgres` for the `minecloud` database. Match this in local development.
+
+### Only PostgreSQL is containerized
+Despite the tech stack listing Redis and MinIO, `infra/docker/docker-compose.yml` only defines PostgreSQL 16. If you need Redis or MinIO, add them there (but they're not required by current code).
+
+### No Turborepo
+The AGENTS.md plan mentions Turborepo but `turbo.json` does not exist. The monorepo uses plain pnpm workspaces. Any cross-package orchestration must use pnpm filters (`--filter`).
+
+### Lombok annotation processor requires explicit Maven config
+The root `pom.xml` has an explicit `maven-compiler-plugin` configuration with `annotationProcessorPaths` pointing to Lombok. Without this, Lombok annotations (`@Data`, `@Builder`, `@Slf4j`, etc.) are not processed and the build fails. If you create a new Maven module, ensure it inherits from the root POM or replicates this config.
+
+## Coding conventions
+
+### Package structure
+- `org.feiesos.{module}.controller` — REST controllers (thin, delegate to facade/service)
+- `org.feiesos.{module}.service` — service interfaces
+- `org.feiesos.{module}.service.impl` — implementations
+- `org.feiesos.{module}.entity` — MyBatis Plus entities (use `@TableName`, `@TableLogic`)
+- `org.feiesos.{module}.mapper` — MyBatis Plus mappers (extend `BaseMapper<T>`)
+- `org.feiesos.{module}.backend` — storage backend implementations
+
+### Shared code goes in `api/` or `common/`
+- DTOs that cross module boundaries → `api/` module (e.g. `org.feiesos.api.auth.dto.*`)
+- Infrastructure (JWT, exception handler, result wrapper) → `common/` module
+- Never duplicate a DTO or utility between auth and storage
+
+### Response format
+All controllers return `R<T>` (from `common`). Use `R.ok(data)`, `R.ok()`, `R.fail(msg)`, or `R.fail(code, msg)`. The timestamp field is set automatically.
+
+### Storage abstraction (critical)
+- **Interface**: `StorageBackend` (NOT "StorageProvider" as the old AGENTS.md called it)
+- Business code must go through `StorageFacade`, which routes through `StorageRouter` → `StorageBackend`
+- Never call `java.nio.file` or MinIO SDK directly from a controller, service, or facade
+- Adding a new storage backend: implement `StorageBackend`, register in `StorageRouter`, add value to `StorageType` enum
+
+### Permission checks
+Use `AuthzService.checkPermission(userId, "permission:string")`. Current permissions used:
+- `file:read`, `file:write`, `file:delete`
+
+### Constructor injection
+Use constructor injection (not `@Autowired` fields). The existing code uses it consistently.
+
+### No tests exist yet
+There are zero tests in the repository. When adding tests, use the standard Spring Boot test stack. Run with:
+
+```bash
+./apps/server/mvnw test -pl services/auth -f apps/server/pom.xml
+```
+
+## Key files to know
+
+| File | Why it matters |
+|---|---|
+| `apps/server/pom.xml` | Root Maven POM, defines all modules and dependency versions |
+| `apps/server/gateway/src/main/resources/application.yml` | Gateway routes + JWT secret |
+| `apps/server/services/auth/src/main/resources/application.yml` | Auth DB config + JWT + MyBatis Plus logical delete |
+| `apps/server/services/storage/src/main/resources/application.yml` | Storage config + upload path + chunk temp dir |
+| `apps/server/services/storage/.../backend/StorageBackend.java` | Storage abstraction interface |
+| `apps/server/services/storage/.../backend/StorageFacade.java` | Main orchestration — all file ops go through here |
+| `apps/server/services/storage/.../backend/StorageRouter.java` | Backend routing with log warnings on fallback |
+| `apps/server/services/storage/.../client/AuthClient.java` | Feign client for auth permission checks |
+| `apps/server/services/storage/.../dto/FileItemResponse.java` | DTO for API responses (decouples entity from API) |
+| `apps/server/common/src/main/java/org/feiesos/common/result/R.java` | Unified API response wrapper |
+| `apps/server/common/src/main/java/org/feiesos/common/security/JwtTokenProvider.java` | JWT create/parse/validate |
+| `apps/server/gateway/.../filter/JwtAuthGatewayFilter.java` | Gateway JWT filter — sets `X-User-Id` header |
+| `apps/server/services/storage/.../config/UserContextFilter.java` | Converts headers to request attributes |
+| `infra/docker/docker-compose.yml` | PostgreSQL container |
+
+## Design constraints (keep these in mind)
+
+- **DDD-lite**: modules map to domains (auth, storage, share, recycle, search). Keep logic in the right module.
+- **Interface-first**: always define a service interface before the implementation.
+- **AI isolation**: agent/OCR/RAG are independent services. The Spring Boot server only handles users, permissions, files, and API routing. Never embed LLM/OCR/Embedding calls in core modules.
+- **Module boundaries**: before adding code, ask: which module does this belong to? Should it be an interface? Does it affect the storage abstraction? Does it need RBAC?
+- **Avoid**: god classes, giant services, util class proliferation, magic strings, hardcoded values (except in application.yml config).

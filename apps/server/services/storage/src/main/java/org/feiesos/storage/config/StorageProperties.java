@@ -8,7 +8,7 @@ import org.springframework.stereotype.Component;
 @ConfigurationProperties(prefix = "minecloud.storage")
 public class StorageProperties {
 
-    private String uploadPath = "D:/minecloud/data/";
+    private String uploadPath = "./data/storage";
     private StorageType defaultType = StorageType.LOCAL;
     private Chunk chunk = new Chunk();
     private Recycle recycle = new Recycle();

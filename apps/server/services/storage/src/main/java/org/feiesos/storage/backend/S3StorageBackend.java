@@ -1,9 +1,11 @@
 package org.feiesos.storage.backend;
 
 import org.feiesos.storage.dto.StorageObject;
+import org.springframework.stereotype.Component;
 import java.io.InputStream;
 import java.util.List;
 
+@Component
 public class S3StorageBackend implements StorageBackend {
 
     @Override

@@ -53,6 +53,13 @@ public class AuthController {
         return R.ok(response);
     }
 
+    @GetMapping("/permission/check")
+    public R<Boolean> checkPermission(@RequestParam Long userId,
+                                       @RequestParam String permissionCode) {
+        boolean hasPermission = authService.checkPermission(userId, permissionCode);
+        return R.ok(hasPermission);
+    }
+
     private String getClientIp(HttpServletRequest request) {
         String xForwardedFor = request.getHeader("X-Forwarded-For");
         if (xForwardedFor != null && !xForwardedFor.isEmpty()) {

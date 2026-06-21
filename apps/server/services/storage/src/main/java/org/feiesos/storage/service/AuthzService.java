@@ -1,24 +1,25 @@
 package org.feiesos.storage.service;
 
 import org.feiesos.common.exception.BusinessException;
-import org.feiesos.storage.mapper.PermissionMapper;
+import org.feiesos.common.result.R;
+import org.feiesos.storage.client.AuthClient;
 import org.springframework.stereotype.Service;
 
 @Service
 public class AuthzService {
 
-    private final PermissionMapper permissionMapper;
+    private final AuthClient authClient;
 
-    public AuthzService(PermissionMapper permissionMapper) {
-        this.permissionMapper = permissionMapper;
+    public AuthzService(AuthClient authClient) {
+        this.authClient = authClient;
     }
 
     public void checkPermission(Long userId, String permissionCode) {
         if (userId == null) {
             throw new BusinessException(401, "未认证");
         }
-        int count = permissionMapper.countPermission(userId, permissionCode);
-        if (count == 0) {
+        R<Boolean> result = authClient.checkPermission(userId, permissionCode);
+        if (result.getCode() != 200 || !Boolean.TRUE.equals(result.getData())) {
             throw new BusinessException(403, "无权限执行该操作: " + permissionCode);
         }
     }

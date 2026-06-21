@@ -5,9 +5,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.feiesos.common.exception.BusinessException;
 import org.feiesos.common.result.R;
 import org.feiesos.storage.backend.StorageFacade;
-import org.feiesos.storage.entity.FileNode;
+import org.feiesos.storage.dto.FileItemResponse;
 import org.feiesos.storage.dto.StorageObject;
 import org.feiesos.storage.recycle.service.RecycleService;
+import org.feiesos.storage.entity.FileNode;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -35,31 +36,35 @@ public class FileController {
     }
 
     @GetMapping("/list")
-    public R<List<FileNode>> list(@RequestParam(defaultValue = "0") Long parentId,
-                                   HttpServletRequest request) {
+    public R<List<FileItemResponse>> list(@RequestParam(defaultValue = "0") Long parentId,
+                                           HttpServletRequest request) {
         Long userId = getUserId(request);
-        return R.ok(storageFacade.listByParent(parentId, userId));
+        List<FileNode> nodes = storageFacade.listByParent(parentId, userId);
+        return R.ok(nodes.stream().map(FileItemResponse::from).toList());
     }
 
     @GetMapping("/browse")
-    public R<List<FileNode>> browse(@RequestParam(defaultValue = "/") String path,
-                                     HttpServletRequest request) {
+    public R<List<FileItemResponse>> browse(@RequestParam(defaultValue = "/") String path,
+                                             HttpServletRequest request) {
         try {
             if (!path.startsWith("/")) {
                 path = "/" + path;
             }
             Long userId = getUserId(request);
-            return R.ok(storageFacade.browse(path, userId));
+            List<FileNode> nodes = storageFacade.browse(path, userId);
+            return R.ok(nodes.stream().map(FileItemResponse::from).toList());
+        } catch (BusinessException e) {
+            return R.fail(e.getCode(), e.getMessage());
         } catch (Exception e) {
-            log.warn("浏览目录失败: {}", e.getMessage());
-            return R.fail(e.getMessage());
+            log.error("浏览目录失败: {}", e.getMessage(), e);
+            return R.fail("浏览目录失败: " + e.getMessage());
         }
     }
 
     @PostMapping("/upload")
-    public R<FileNode> upload(@RequestParam("file") MultipartFile file,
-                               @RequestParam(defaultValue = "/") String path,
-                               HttpServletRequest request) {
+    public R<FileItemResponse> upload(@RequestParam("file") MultipartFile file,
+                                       @RequestParam(defaultValue = "/") String path,
+                                       HttpServletRequest request) {
         if (file.isEmpty()) {
             return R.fail("上传失败：文件内容不能为空");
         }
@@ -70,7 +75,7 @@ public class FileController {
             FileNode node = storageFacade.upload(
                     file.getOriginalFilename(), parentId, userId,
                     file.getInputStream(), file.getSize());
-            return R.ok(node);
+            return R.ok(FileItemResponse.from(node));
         } catch (BusinessException e) {
             return R.fail(e.getCode(), e.getMessage());
         } catch (Exception e) {
@@ -81,11 +86,15 @@ public class FileController {
 
     @PostMapping("/chunk")
     public R<String> uploadChunk(@RequestParam("file") MultipartFile file,
-                                  @RequestParam("md5") String md5,
-                                  @RequestParam("index") Integer index) {
+                                   @RequestParam("md5") String md5,
+                                   @RequestParam("index") Integer index,
+                                   HttpServletRequest request) {
         try {
-            storageFacade.uploadChunk(md5, index, file.getInputStream(), file.getSize());
+            Long userId = getUserId(request);
+            storageFacade.uploadChunk(md5, index, userId, file.getInputStream(), file.getSize());
             return R.ok("分片 " + index + " 上传成功");
+        } catch (BusinessException e) {
+            return R.fail(e.getCode(), e.getMessage());
         } catch (Exception e) {
             log.error("分片上传异常: ", e);
             return R.fail("分片上传失败: " + e.getMessage());
@@ -93,14 +102,15 @@ public class FileController {
     }
 
     @PostMapping("/merge")
-    public R<FileNode> merge(@RequestParam("md5") String md5,
-                              @RequestParam("fileName") String fileName,
-                              @RequestParam("path") String path,
-                              HttpServletRequest request) {
+    public R<FileItemResponse> merge(@RequestParam("md5") String md5,
+                                      @RequestParam("fileName") String fileName,
+                                      @RequestParam(defaultValue = "/") String path,
+                                      HttpServletRequest request) {
         try {
             Long userId = getUserId(request);
             Long parentId = storageFacade.resolvePathToId(path, userId);
-            return R.ok(storageFacade.mergeChunks(md5, fileName, parentId, userId));
+            FileNode node = storageFacade.mergeChunks(md5, fileName, parentId, userId);
+            return R.ok(FileItemResponse.from(node));
         } catch (BusinessException e) {
             return R.fail(e.getCode(), e.getMessage());
         } catch (Exception e) {
@@ -110,16 +120,19 @@ public class FileController {
     }
 
     @PostMapping("/mkdir")
-    public R<FileNode> createDirectory(@RequestParam String name,
-                                        @RequestParam(defaultValue = "/") String path,
-                                        HttpServletRequest request) {
+    public R<FileItemResponse> createDirectory(@RequestParam String name,
+                                                @RequestParam(defaultValue = "/") String path,
+                                                HttpServletRequest request) {
         if (name == null || name.trim().isEmpty()) {
             return R.fail("文件夹名称不能为空");
         }
         try {
             Long userId = getUserId(request);
             Long parentId = storageFacade.resolvePathToId(path, userId);
-            return R.ok(storageFacade.createDirectory(name, parentId, userId));
+            FileNode node = storageFacade.createDirectory(name, parentId, userId);
+            return R.ok(FileItemResponse.from(node));
+        } catch (BusinessException e) {
+            return R.fail(e.getCode(), e.getMessage());
         } catch (Exception e) {
             log.error("新建文件夹失败", e);
             return R.fail("新建文件夹失败：" + e.getMessage());

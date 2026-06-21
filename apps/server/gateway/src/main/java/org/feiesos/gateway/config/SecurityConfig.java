@@ -14,14 +14,7 @@ public class SecurityConfig {
         return http
                 .csrf(ServerHttpSecurity.CsrfSpec::disable)
                 .authorizeExchange(exchanges -> exchanges
-                        .pathMatchers(
-                                "/api/v1/auth/register",
-                                "/api/v1/auth/login",
-                                "/api/v1/auth/verify-email",
-                                "/api/v1/auth/resend-verification",
-                                "/api/v1/auth/refresh"
-                        ).permitAll()
-                        .anyExchange().authenticated())
+                        .anyExchange().permitAll())
                 .httpBasic(ServerHttpSecurity.HttpBasicSpec::disable)
                 .formLogin(ServerHttpSecurity.FormLoginSpec::disable)
                 .build();

@@ -58,7 +58,10 @@ public class LocalStorageBackend implements StorageBackend {
     public void write(String storagePath, InputStream data, long size) {
         Path file = resolve(storagePath);
         try {
-            Files.createDirectories(file.getParent());
+            Path parent = file.getParent();
+            if (parent != null) {
+                Files.createDirectories(parent);
+            }
             try (OutputStream os = Files.newOutputStream(file)) {
                 data.transferTo(os);
             }
