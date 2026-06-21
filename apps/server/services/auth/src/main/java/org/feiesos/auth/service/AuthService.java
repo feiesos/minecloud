@@ -18,4 +18,8 @@ public interface AuthService {
     LoginResponse refreshToken(String refreshToken);
 
     boolean checkPermission(Long userId, String permissionCode);
+
+    void forgotPassword(String email, String clientIp);
+
+    void resetPassword(String token, String newPassword);
 }

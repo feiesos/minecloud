@@ -15,5 +15,5 @@ public class RegisterResponse {
 
     private String username;
 
-    private String verificationToken;
+    private String email;
 }

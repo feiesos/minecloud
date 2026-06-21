@@ -1,10 +1,10 @@
 package org.feiesos.auth.service.impl;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import org.feiesos.api.auth.dto.LoginRequest;
 import org.feiesos.api.auth.dto.LoginResponse;
 import org.feiesos.api.auth.dto.RegisterRequest;
 import org.feiesos.api.auth.dto.RegisterResponse;
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import org.feiesos.auth.entity.SysRefreshToken;
 import org.feiesos.auth.entity.SysRole;
 import org.feiesos.auth.entity.SysUser;
@@ -15,6 +15,7 @@ import org.feiesos.auth.mapper.SysRoleMapper;
 import org.feiesos.auth.mapper.UserMapper;
 import org.feiesos.auth.mapper.UserRoleMapper;
 import org.feiesos.auth.service.AuthService;
+import org.feiesos.auth.service.EmailService;
 import org.feiesos.auth.service.RateLimitService;
 import org.feiesos.common.exception.BusinessException;
 import org.feiesos.common.security.JwtClaims;
@@ -41,6 +42,9 @@ public class AuthServiceImpl implements AuthService {
     private static final int LOGIN_MAX_ATTEMPTS = 5;
     private static final Duration LOGIN_WINDOW = Duration.ofMinutes(15);
 
+    private static final int FORGOT_PASSWORD_MAX_ATTEMPTS = 3;
+    private static final Duration FORGOT_PASSWORD_WINDOW = Duration.ofMinutes(15);
+
     private final UserMapper userMapper;
     private final RefreshTokenMapper refreshTokenMapper;
     private final PermissionMapper permissionMapper;
@@ -50,6 +54,7 @@ public class AuthServiceImpl implements AuthService {
     private final JwtTokenProvider jwtTokenProvider;
     private final JwtProperties jwtProperties;
     private final RateLimitService rateLimitService;
+    private final EmailService emailService;
 
     public AuthServiceImpl(UserMapper userMapper,
                            RefreshTokenMapper refreshTokenMapper,
@@ -59,7 +64,8 @@ public class AuthServiceImpl implements AuthService {
                            PasswordEncoder passwordEncoder,
                            JwtTokenProvider jwtTokenProvider,
                            JwtProperties jwtProperties,
-                           RateLimitService rateLimitService) {
+                           RateLimitService rateLimitService,
+                           EmailService emailService) {
         this.userMapper = userMapper;
         this.refreshTokenMapper = refreshTokenMapper;
         this.permissionMapper = permissionMapper;
@@ -69,6 +75,7 @@ public class AuthServiceImpl implements AuthService {
         this.jwtTokenProvider = jwtTokenProvider;
         this.jwtProperties = jwtProperties;
         this.rateLimitService = rateLimitService;
+        this.emailService = emailService;
     }
 
     @Override
@@ -99,17 +106,17 @@ public class AuthServiceImpl implements AuthService {
         user.setEnabled(false);
         user.setVerificationToken(UUID.randomUUID().toString());
         user.setVerificationTokenExpireAt(OffsetDateTime.now().plusHours(24));
-
         userMapper.insert(user);
 
         assignDefaultRole(user.getId());
-
         rateLimitService.recordAttempt(registerKey);
+
+        emailService.sendVerificationEmail(user.getEmail(), user.getUsername(), user.getVerificationToken());
 
         return RegisterResponse.builder()
                 .userId(user.getId())
                 .username(user.getUsername())
-                .verificationToken(user.getVerificationToken())
+                .email(user.getEmail())
                 .build();
     }
 
@@ -200,10 +207,12 @@ public class AuthServiceImpl implements AuthService {
         user.setVerificationTokenExpireAt(OffsetDateTime.now().plusHours(24));
         userMapper.updateById(user);
 
+        emailService.sendVerificationEmail(user.getEmail(), user.getUsername(), user.getVerificationToken());
+
         return RegisterResponse.builder()
                 .userId(user.getId())
                 .username(user.getUsername())
-                .verificationToken(user.getVerificationToken())
+                .email(user.getEmail())
                 .build();
     }
 
@@ -247,6 +256,56 @@ public class AuthServiceImpl implements AuthService {
                 .username(user.getUsername())
                 .nickname(user.getNickname())
                 .build();
+    }
+
+    @Override
+    @Transactional
+    public void forgotPassword(String email, String clientIp) {
+        String fpKey = "forgot-password:" + clientIp;
+        if (rateLimitService.isRateLimited(fpKey, FORGOT_PASSWORD_MAX_ATTEMPTS, FORGOT_PASSWORD_WINDOW)) {
+            throw new BusinessException(429, "操作频率过高，请稍后再试");
+        }
+
+        SysUser user = userMapper.findByEmail(email);
+        if (user == null) {
+            rateLimitService.recordAttempt(fpKey);
+            return;
+        }
+
+        if (!Boolean.TRUE.equals(user.getEnabled())) {
+            rateLimitService.recordAttempt(fpKey);
+            return;
+        }
+
+        user.setResetPasswordToken(UUID.randomUUID().toString());
+        user.setResetPasswordTokenExpireAt(OffsetDateTime.now().plusHours(1));
+        userMapper.updateById(user);
+        rateLimitService.recordAttempt(fpKey);
+
+        emailService.sendPasswordResetEmail(user.getEmail(), user.getUsername(), user.getResetPasswordToken());
+    }
+
+    @Override
+    @Transactional
+    public void resetPassword(String token, String newPassword) {
+        SysUser user = userMapper.findByResetPasswordToken(token);
+        if (user == null) {
+            throw new BusinessException("重置令牌无效或已过期");
+        }
+
+        if (user.getResetPasswordTokenExpireAt() != null
+                && user.getResetPasswordTokenExpireAt().isBefore(OffsetDateTime.now())) {
+            throw new BusinessException("重置令牌已过期");
+        }
+
+        if (!PASSWORD_PATTERN.matcher(newPassword).matches()) {
+            throw new BusinessException("密码至少8位，需包含大小写字母和数字");
+        }
+
+        user.setPasswordHash(passwordEncoder.encode(newPassword));
+        user.setResetPasswordToken(null);
+        user.setResetPasswordTokenExpireAt(null);
+        userMapper.updateById(user);
     }
 
     @Override

@@ -2,11 +2,13 @@ package org.feiesos.auth.controller;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
+import org.feiesos.api.auth.dto.ForgotPasswordRequest;
 import org.feiesos.api.auth.dto.LoginRequest;
 import org.feiesos.api.auth.dto.LoginResponse;
 import org.feiesos.api.auth.dto.RefreshRequest;
 import org.feiesos.api.auth.dto.RegisterRequest;
 import org.feiesos.api.auth.dto.RegisterResponse;
+import org.feiesos.api.auth.dto.ResetPasswordRequest;
 import org.feiesos.common.result.R;
 import org.feiesos.auth.service.AuthService;
 import org.springframework.web.bind.annotation.*;
@@ -51,6 +53,20 @@ public class AuthController {
     public R<LoginResponse> refreshToken(@Valid @RequestBody RefreshRequest request) {
         LoginResponse response = authService.refreshToken(request.getRefreshToken());
         return R.ok(response);
+    }
+
+    @PostMapping("/forgot-password")
+    public R<Void> forgotPassword(@Valid @RequestBody ForgotPasswordRequest request,
+                                   HttpServletRequest httpRequest) {
+        String clientIp = getClientIp(httpRequest);
+        authService.forgotPassword(request.getEmail(), clientIp);
+        return R.ok();
+    }
+
+    @PostMapping("/reset-password")
+    public R<Void> resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
+        authService.resetPassword(request.getToken(), request.getNewPassword());
+        return R.ok();
     }
 
     @GetMapping("/permission/check")

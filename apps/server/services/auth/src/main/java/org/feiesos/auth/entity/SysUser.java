@@ -36,6 +36,10 @@ public class SysUser extends BaseEntity {
 
     private java.time.OffsetDateTime verificationTokenExpireAt;
 
+    private String resetPasswordToken;
+
+    private java.time.OffsetDateTime resetPasswordTokenExpireAt;
+
     @TableLogic
     private Boolean deleted;
 }

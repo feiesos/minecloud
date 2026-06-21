@@ -29,7 +29,7 @@ server (root POM)
 ## Current status vs. future plan
 
 **What exists and works:**
-- Auth: register (with email verification token), login, JWT access+refresh, RBAC entities (sys_user, sys_role, sys_permission, join tables), permission-check API endpoint for service-to-service calls
+- Auth: register (sends verification email), login, JWT access+refresh, email verification, forgot-password / reset-password with email, RBAC entities (sys_user, sys_role, sys_permission, join tables), permission-check API endpoint for service-to-service calls
 - Storage: upload, chunked upload + MD5 merge, download, delete (soft-delete with recursive child cleanup), mkdir, browse/path-resolution; directory tree via `file_node.parent_id`
 - `StorageBackend` interface with a working `LocalStorageBackend`; `S3StorageBackend` and `MountStorageBackend` are stubs (registered as beans so `StorageRouter` can discover them)
 - `StorageRouter` selects backends per-file based on `FileNode.storageType` with log warnings on fallback
@@ -119,6 +119,9 @@ All `application.yml` files use `postgres/postgres` for the `minecloud` database
 
 ### Only PostgreSQL is containerized
 Despite the tech stack listing Redis and MinIO, `infra/docker/docker-compose.yml` only defines PostgreSQL 16. If you need Redis or MinIO, add them there (but they're not required by current code).
+
+### Email configuration required for auth features
+Registration, email verification, and password reset require an SMTP server. Configure via environment variables: `MAIL_HOST`, `MAIL_PORT`, `MAIL_USERNAME`, `MAIL_PASSWORD`, `MAIL_FROM`. Without SMTP config, emails are skipped and tokens are logged at `WARN` level. For local development, use [Mailpit](https://github.com/axllent/mailpit) or similar.
 
 ### No Turborepo
 The AGENTS.md plan mentions Turborepo but `turbo.json` does not exist. The monorepo uses plain pnpm workspaces. Any cross-package orchestration must use pnpm filters (`--filter`).

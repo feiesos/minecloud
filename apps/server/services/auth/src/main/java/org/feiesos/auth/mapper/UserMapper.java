@@ -16,5 +16,8 @@ public interface UserMapper extends BaseMapper<SysUser> {
 
     @Select("SELECT * FROM sys_user WHERE verification_token = #{token} AND deleted = false")
     SysUser findByVerificationToken(String token);
+
+    @Select("SELECT * FROM sys_user WHERE reset_password_token = #{token} AND deleted = false")
+    SysUser findByResetPasswordToken(String token);
 }
 
