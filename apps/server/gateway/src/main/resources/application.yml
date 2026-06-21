@@ -18,5 +18,9 @@ spring:
           uri: http://localhost:8082
           predicates:
             - Path=/api/v1/files/**,/api/v1/recycle/**
+        - id: share
+          uri: http://localhost:8083
+          predicates:
+            - Path=/api/v1/share/**
   main:
     web-application-type: reactive
