@@ -1,4 +1,7 @@
 import { apiClient, apiUpload } from './client';
+import { tokenStore } from './tokenStore';
+
+const BASE_URL = '/api/v1';
 
 export interface FileItem {
   id: string;
@@ -23,10 +26,11 @@ export async function getFileDetail(id: string): Promise<FileItem> {
   return apiClient<FileItem>(`/files/${id}`);
 }
 
-export async function uploadFile(file: File, path = '/'): Promise<FileItem> {
+export async function uploadFile(file: File, path = '/', md5?: string): Promise<FileItem> {
   const fd = new FormData();
   fd.append('file', file);
   fd.append('path', path);
+  if (md5) fd.append('md5', md5);
   return apiUpload<FileItem>('/files/upload', fd);
 }
 
@@ -100,6 +104,25 @@ export async function deleteFile(id: string): Promise<void> {
 
 export function getDownloadUrl(id: string): string {
   return `/api/v1/files/download/${id}`;
+}
+
+export async function downloadFile(id: string, filename: string): Promise<void> {
+  const token = tokenStore.getAccessToken();
+  const res = await fetch(`${BASE_URL}/files/download/${id}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!res.ok) {
+    throw new Error(res.status === 401 ? '需要授权' : '下载失败');
+  }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 
 export function getPreviewUrl(id: string): string {

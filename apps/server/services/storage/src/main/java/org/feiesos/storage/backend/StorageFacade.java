@@ -103,6 +103,11 @@ public class StorageFacade {
 
     @Transactional
     public FileNode upload(String name, Long parentId, Long userId, InputStream data, long size) {
+        return upload(name, parentId, userId, data, size, null);
+    }
+
+    @Transactional
+    public FileNode upload(String name, Long parentId, Long userId, InputStream data, long size, String md5) {
         authzService.checkPermission(userId, "file:write");
 
         Long count = fileNodeMapper.selectCount(new LambdaQueryWrapper<FileNode>()
@@ -111,6 +116,38 @@ public class StorageFacade {
                 .eq(FileNode::getIsDeleted, false));
         if (count > 0) {
             throw new BusinessException("该目录下已存在同名文件: " + name);
+        }
+
+        if (md5 != null) {
+            FileNode existing = fileNodeMapper.selectOne(new LambdaQueryWrapper<FileNode>()
+                    .eq(FileNode::getFileHash, md5)
+                    .eq(FileNode::getOwnerId, userId)
+                    .eq(FileNode::getIsDir, false)
+                    .eq(FileNode::getIsDeleted, false)
+                    .last("LIMIT 1"));
+            if (existing != null) {
+                StorageBackend backend = router.route(existing);
+                StorageObject obj = backend.read(existing.getStoragePath());
+                String newStoragePath = UUID.randomUUID().toString() + "_" + name;
+                try {
+                    backend.write(newStoragePath, obj.getInputStream(), obj.getSize());
+                } finally {
+                    try { obj.close(); } catch (IOException ignored) {}
+                }
+
+                FileNode node = new FileNode();
+                node.setName(name);
+                node.setParentId(parentId);
+                node.setIsDir(false);
+                node.setSize(existing.getSize());
+                node.setFileHash(md5);
+                node.setStoragePath(newStoragePath);
+                node.setStorageType(backend.type().name());
+                node.setOwnerId(userId);
+                node.setCreateTime(LocalDateTime.now());
+                fileNodeMapper.insert(node);
+                return node;
+            }
         }
 
         String storagePath = UUID.randomUUID().toString() + "_" + name;
@@ -128,6 +165,9 @@ public class StorageFacade {
         node.setSize(size);
         node.setStoragePath(storagePath);
         node.setStorageType(backend.type().name());
+        if (md5 != null) {
+            node.setFileHash(md5);
+        }
         node.setOwnerId(userId);
         node.setCreateTime(LocalDateTime.now());
         fileNodeMapper.insert(node);

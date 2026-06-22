@@ -8,8 +8,7 @@ import {
   createDirectory,
   renameFile,
   deleteFile,
-  getDownloadUrl,
-  checkHash,
+  downloadFile,
   quickUpload,
   uploadChunk,
   mergeChunks,
@@ -115,34 +114,32 @@ export default function FileManager() {
     setUploadProgress('计算哈希中…');
     try {
       const currentPath = '/' + breadcrumb.slice(1).map((s) => s.name).join('/');
-
       const md5 = await computeMD5(file);
 
-      const hashResult = await checkHash(md5);
-      if (hashResult.exists) {
-        setUploadProgress('秒传中…');
-        await quickUpload(md5, file.name, currentPath);
-        await reloadFiles();
-        return;
-      }
-
       if (file.size <= 100 * 1024 * 1024) {
-        await uploadFile(file, currentPath);
+        await uploadFile(file, currentPath, md5);
         await reloadFiles();
         return;
       }
 
-      const CHUNK_SIZE = 5 * 1024 * 1024;
-      const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
-      for (let i = 0; i < totalChunks; i++) {
-        setUploadProgress(`上传中 ${i + 1}/${totalChunks}`);
-        const start = i * CHUNK_SIZE;
-        const end = Math.min(start + CHUNK_SIZE, file.size);
-        const chunk = file.slice(start, end);
-        await uploadChunk(chunk, md5, i);
+      // >100MB: try 秒传 first, fallback to chunked upload
+      setUploadProgress('检测中…');
+      try {
+        await quickUpload(md5, file.name, currentPath);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : '';
+        if (!msg.includes('未找到匹配的文件哈希')) throw err;
+        const CHUNK_SIZE = 5 * 1024 * 1024;
+        const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+        for (let i = 0; i < totalChunks; i++) {
+          setUploadProgress(`上传中 ${i + 1}/${totalChunks}`);
+          const start = i * CHUNK_SIZE;
+          const end = Math.min(start + CHUNK_SIZE, file.size);
+          await uploadChunk(file.slice(start, end), md5, i);
+        }
+        setUploadProgress('合并中…');
+        await mergeChunks(md5, file.name, currentPath);
       }
-      setUploadProgress('合并中…');
-      await mergeChunks(md5, file.name, currentPath);
       await reloadFiles();
     } catch (err) {
       setError(err instanceof Error ? err.message : '上传失败');
@@ -287,14 +284,13 @@ export default function FileManager() {
                               <span>{item.name}</span>
                             </button>
                           ) : (
-                            <a
-                              className="fm-name-link"
-                              href={getDownloadUrl(item.id)}
-                              download={item.name}
+                            <button
+                              className="fm-name-link fm-btn-name"
+                              onClick={() => downloadFile(item.id, item.name)}
                             >
                               {item.isDir ? <DirIcon /> : <FileIcon name={item.name} />}
                               <span>{item.name}</span>
-                            </a>
+                            </button>
                           )}
                         </td>
                         <td className="fm-cell-size">{item.isDir ? '—' : formatSize(item.size)}</td>
@@ -312,14 +308,13 @@ export default function FileManager() {
                               <PencilIcon size={14} />
                             </button>
                             {!item.isDir && (
-                              <a
+                              <button
                                 className="fm-btn fm-btn-row"
                                 title="下载"
-                                href={getDownloadUrl(item.id)}
-                                download={item.name}
+                                onClick={() => downloadFile(item.id, item.name)}
                               >
                                 <DownloadIcon size={14} />
-                              </a>
+                              </button>
                             )}
                             <button
                               className="fm-btn fm-btn-row fm-btn-row-danger"

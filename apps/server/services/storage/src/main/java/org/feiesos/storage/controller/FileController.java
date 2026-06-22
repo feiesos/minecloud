@@ -64,6 +64,7 @@ public class FileController {
     @PostMapping("/upload")
     public R<FileItemResponse> upload(@RequestParam("file") MultipartFile file,
                                        @RequestParam(defaultValue = "/") String path,
+                                       @RequestParam(required = false) String md5,
                                        HttpServletRequest request) {
         if (file.isEmpty()) {
             return R.fail("上传失败：文件内容不能为空");
@@ -74,7 +75,7 @@ public class FileController {
             log.info("接收上传文件: {}, 大小: {} bytes", file.getOriginalFilename(), file.getSize());
             FileNode node = storageFacade.upload(
                     file.getOriginalFilename(), parentId, userId,
-                    file.getInputStream(), file.getSize());
+                    file.getInputStream(), file.getSize(), md5);
             return R.ok(FileItemResponse.from(node));
         } catch (BusinessException e) {
             return R.fail(e.getCode(), e.getMessage());
