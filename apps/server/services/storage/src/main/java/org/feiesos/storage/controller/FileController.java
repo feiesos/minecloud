@@ -287,10 +287,7 @@ public class FileController {
             Long userId = getUserId(request);
             StorageObject storageObj = storageFacade.download(id, userId);
 
-            String mimeType = URLConnection.guessContentTypeFromName(storageObj.getFilename());
-            if (mimeType == null) {
-                mimeType = "application/octet-stream";
-            }
+            String mimeType = guessMimeType(storageObj.getFilename());
 
             StreamingResponseBody body = outputStream -> {
                 try (storageObj) {
@@ -334,5 +331,50 @@ public class FileController {
             throw new BusinessException(401, "未认证");
         }
         return (Long) userId;
+    }
+
+    private static String guessMimeType(String filename) {
+        if (filename == null) return "application/octet-stream";
+        String name = filename.toLowerCase();
+        if (name.endsWith(".txt")) return "text/plain; charset=utf-8";
+        if (name.endsWith(".md") || name.endsWith(".markdown")) return "text/markdown; charset=utf-8";
+        if (name.endsWith(".html") || name.endsWith(".htm")) return "text/html; charset=utf-8";
+        if (name.endsWith(".css")) return "text/css; charset=utf-8";
+        if (name.endsWith(".js")) return "text/javascript; charset=utf-8";
+        if (name.endsWith(".ts") || name.endsWith(".tsx")) return "text/plain; charset=utf-8";
+        if (name.endsWith(".jsx")) return "text/plain; charset=utf-8";
+        if (name.endsWith(".json")) return "application/json; charset=utf-8";
+        if (name.endsWith(".xml")) return "application/xml; charset=utf-8";
+        if (name.endsWith(".yml") || name.endsWith(".yaml")) return "text/plain; charset=utf-8";
+        if (name.endsWith(".java") || name.endsWith(".kt") || name.endsWith(".kts")) return "text/plain; charset=utf-8";
+        if (name.endsWith(".py") || name.endsWith(".rb") || name.endsWith(".go") || name.endsWith(".rs"))
+            return "text/plain; charset=utf-8";
+        if (name.endsWith(".c") || name.endsWith(".cpp") || name.endsWith(".h") || name.endsWith(".hpp"))
+            return "text/plain; charset=utf-8";
+        if (name.endsWith(".sql")) return "text/plain; charset=utf-8";
+        if (name.endsWith(".sh") || name.endsWith(".bash") || name.endsWith(".zsh"))
+            return "text/plain; charset=utf-8";
+        if (name.endsWith(".bat") || name.endsWith(".cmd") || name.endsWith(".ps1"))
+            return "text/plain; charset=utf-8";
+        if (name.endsWith(".pdf")) return "application/pdf";
+        if (name.endsWith(".mp3")) return "audio/mpeg";
+        if (name.endsWith(".wav")) return "audio/wav";
+        if (name.endsWith(".ogg")) return "audio/ogg";
+        if (name.endsWith(".flac")) return "audio/flac";
+        if (name.endsWith(".aac")) return "audio/aac";
+        if (name.endsWith(".mp4")) return "video/mp4";
+        if (name.endsWith(".webm")) return "video/webm";
+        if (name.endsWith(".avi")) return "video/x-msvideo";
+        if (name.endsWith(".mov")) return "video/quicktime";
+        if (name.endsWith(".mkv")) return "video/x-matroska";
+        if (name.endsWith(".jpg") || name.endsWith(".jpeg")) return "image/jpeg";
+        if (name.endsWith(".png")) return "image/png";
+        if (name.endsWith(".gif")) return "image/gif";
+        if (name.endsWith(".svg")) return "image/svg+xml";
+        if (name.endsWith(".webp")) return "image/webp";
+        if (name.endsWith(".ico")) return "image/x-icon";
+        if (name.endsWith(".bmp")) return "image/bmp";
+        String guessed = URLConnection.guessContentTypeFromName(filename);
+        return guessed != null ? guessed : "application/octet-stream";
     }
 }

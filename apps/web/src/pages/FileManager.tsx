@@ -23,6 +23,7 @@ import DownloadIcon from '../components/icons/DownloadIcon';
 import TrashIcon from '../components/icons/TrashIcon';
 import UploadIcon from '../components/icons/UploadIcon';
 import PlusIcon from '../components/icons/PlusIcon';
+import PreviewModal from '../components/PreviewModal';
 import { formatSize, formatRelativeDate } from '../utils/format';
 import './FileManager.css';
 
@@ -42,6 +43,7 @@ export default function FileManager() {
   const [renaming, setRenaming] = useState<{ id: string; name: string } | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [previewItem, setPreviewItem] = useState<{ id: string; name: string } | null>(null);
 
   const uploadRef = useRef<HTMLInputElement>(null);
   const newFolderRef = useRef<HTMLInputElement>(null);
@@ -286,7 +288,7 @@ export default function FileManager() {
                           ) : (
                             <button
                               className="fm-name-link fm-btn-name"
-                              onClick={() => downloadFile(item.id, item.name)}
+                              onClick={() => setPreviewItem({ id: item.id, name: item.name })}
                             >
                               {item.isDir ? <DirIcon /> : <FileIcon name={item.name} />}
                               <span>{item.name}</span>
@@ -335,6 +337,14 @@ export default function FileManager() {
           )}
         </div>
       </div>
+
+      {previewItem && (
+        <PreviewModal
+          id={previewItem.id}
+          name={previewItem.name}
+          onClose={() => setPreviewItem(null)}
+        />
+      )}
 
       {renaming && (
         <div className="fm-overlay" onClick={() => setRenaming(null)}>

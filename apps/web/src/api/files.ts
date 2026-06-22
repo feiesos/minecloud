@@ -125,6 +125,25 @@ export async function downloadFile(id: string, filename: string): Promise<void> 
   URL.revokeObjectURL(url);
 }
 
-export function getPreviewUrl(id: string): string {
-  return `/api/v1/files/preview/${id}`;
+export async function fetchPreviewBlobUrl(id: string): Promise<string> {
+  const token = tokenStore.getAccessToken();
+  const res = await fetch(`${BASE_URL}/files/${id}/preview`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!res.ok) {
+    throw new Error(res.status === 401 ? '需要授权' : '预览加载失败');
+  }
+  const blob = await res.blob();
+  return URL.createObjectURL(blob);
+}
+
+export async function fetchPreviewText(id: string): Promise<string> {
+  const token = tokenStore.getAccessToken();
+  const res = await fetch(`${BASE_URL}/files/${id}/preview`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!res.ok) {
+    throw new Error(res.status === 401 ? '需要授权' : '预览加载失败');
+  }
+  return res.text();
 }
