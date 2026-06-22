@@ -9,7 +9,12 @@ import {
   renameFile,
   deleteFile,
   getDownloadUrl,
+  checkHash,
+  quickUpload,
+  uploadChunk,
+  mergeChunks,
 } from '../api/files';
+import { computeMD5 } from '../utils/hash';
 import AppHeader from '../components/AppHeader';
 import DirIcon from '../components/DirIcon';
 import FileIcon from '../components/FileIcon';
@@ -32,6 +37,7 @@ export default function FileManager() {
   ]);
 
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState('');
   const [showNewFolder, setShowNewFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
   const [renaming, setRenaming] = useState<{ id: string; name: string } | null>(null);
@@ -106,14 +112,43 @@ export default function FileManager() {
     if (!file) return;
     setUploading(true);
     setError('');
+    setUploadProgress('计算哈希中…');
     try {
       const currentPath = '/' + breadcrumb.slice(1).map((s) => s.name).join('/');
-      await uploadFile(file, currentPath);
+
+      const md5 = await computeMD5(file);
+
+      const hashResult = await checkHash(md5);
+      if (hashResult.exists) {
+        setUploadProgress('秒传中…');
+        await quickUpload(md5, file.name, currentPath);
+        await reloadFiles();
+        return;
+      }
+
+      if (file.size <= 100 * 1024 * 1024) {
+        await uploadFile(file, currentPath);
+        await reloadFiles();
+        return;
+      }
+
+      const CHUNK_SIZE = 5 * 1024 * 1024;
+      const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+      for (let i = 0; i < totalChunks; i++) {
+        setUploadProgress(`上传中 ${i + 1}/${totalChunks}`);
+        const start = i * CHUNK_SIZE;
+        const end = Math.min(start + CHUNK_SIZE, file.size);
+        const chunk = file.slice(start, end);
+        await uploadChunk(chunk, md5, i);
+      }
+      setUploadProgress('合并中…');
+      await mergeChunks(md5, file.name, currentPath);
       await reloadFiles();
     } catch (err) {
       setError(err instanceof Error ? err.message : '上传失败');
     } finally {
       setUploading(false);
+      setUploadProgress('');
       if (uploadRef.current) uploadRef.current.value = '';
     }
   }
@@ -178,7 +213,7 @@ export default function FileManager() {
                 onClick={() => uploadRef.current?.click()}
                 disabled={uploading}
               >
-                {uploading ? '上传中…' : <><UploadIcon size={14} />上传文件</>}
+                {uploading ? (uploadProgress || '上传中…') : <><UploadIcon size={14} />上传文件</>}
               </button>
               <button className="fm-btn fm-btn-action" onClick={() => setShowNewFolder(true)}>
                 <PlusIcon size={14} />新建文件夹

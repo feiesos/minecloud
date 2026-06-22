@@ -134,6 +134,60 @@ public class StorageFacade {
         return node;
     }
 
+    public FileNode findByHash(String md5, Long userId) {
+        return fileNodeMapper.selectOne(new LambdaQueryWrapper<FileNode>()
+                .eq(FileNode::getFileHash, md5)
+                .eq(FileNode::getOwnerId, userId)
+                .eq(FileNode::getIsDir, false)
+                .eq(FileNode::getIsDeleted, false)
+                .last("LIMIT 1"));
+    }
+
+    @Transactional
+    public FileNode quickUpload(String md5, String fileName, Long parentId, Long userId) {
+        authzService.checkPermission(userId, "file:write");
+
+        FileNode existing = fileNodeMapper.selectOne(new LambdaQueryWrapper<FileNode>()
+                .eq(FileNode::getFileHash, md5)
+                .eq(FileNode::getOwnerId, userId)
+                .eq(FileNode::getIsDir, false)
+                .eq(FileNode::getIsDeleted, false)
+                .last("LIMIT 1"));
+        if (existing == null) {
+            return null;
+        }
+
+        Long count = fileNodeMapper.selectCount(new LambdaQueryWrapper<FileNode>()
+                .eq(FileNode::getParentId, parentId)
+                .eq(FileNode::getName, fileName)
+                .eq(FileNode::getIsDeleted, false));
+        if (count > 0) {
+            throw new BusinessException("该目录下已存在同名文件: " + fileName);
+        }
+
+        StorageBackend backend = router.route(existing);
+        StorageObject obj = backend.read(existing.getStoragePath());
+        String newStoragePath = UUID.randomUUID().toString() + "_" + fileName;
+        try {
+            backend.write(newStoragePath, obj.getInputStream(), obj.getSize());
+        } finally {
+            try { obj.close(); } catch (IOException ignored) {}
+        }
+
+        FileNode node = new FileNode();
+        node.setName(fileName);
+        node.setParentId(parentId);
+        node.setIsDir(false);
+        node.setSize(existing.getSize());
+        node.setFileHash(md5);
+        node.setStoragePath(newStoragePath);
+        node.setStorageType(backend.type().name());
+        node.setOwnerId(userId);
+        node.setCreateTime(LocalDateTime.now());
+        fileNodeMapper.insert(node);
+        return node;
+    }
+
     public void uploadChunk(String md5, int index, Long userId, InputStream data, long size) {
         authzService.checkPermission(userId, "file:write");
         String chunkPath = chunkTempDir(userId) + "/" + md5 + "/" + index;

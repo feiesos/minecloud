@@ -84,6 +84,45 @@ public class FileController {
         }
     }
 
+    @GetMapping("/check-hash")
+    public R<Map<String, Object>> checkHash(@RequestParam String md5,
+                                             HttpServletRequest request) {
+        try {
+            Long userId = getUserId(request);
+            FileNode existing = storageFacade.findByHash(md5, userId);
+            if (existing != null) {
+                return R.ok(Map.of("exists", true, "size", existing.getSize()));
+            }
+            return R.ok(Map.of("exists", false));
+        } catch (BusinessException e) {
+            return R.fail(e.getCode(), e.getMessage());
+        } catch (Exception e) {
+            log.error("检测哈希异常: ", e);
+            return R.fail("检测失败: " + e.getMessage());
+        }
+    }
+
+    @PostMapping("/quick-upload")
+    public R<FileItemResponse> quickUpload(@RequestParam String md5,
+                                            @RequestParam String fileName,
+                                            @RequestParam(defaultValue = "/") String path,
+                                            HttpServletRequest request) {
+        try {
+            Long userId = getUserId(request);
+            Long parentId = storageFacade.resolvePathToId(path, userId);
+            FileNode node = storageFacade.quickUpload(md5, fileName, parentId, userId);
+            if (node == null) {
+                return R.fail(404, "未找到匹配的文件哈希，无法秒传");
+            }
+            return R.ok(FileItemResponse.from(node));
+        } catch (BusinessException e) {
+            return R.fail(e.getCode(), e.getMessage());
+        } catch (Exception e) {
+            log.error("秒传异常: ", e);
+            return R.fail("秒传失败: " + e.getMessage());
+        }
+    }
+
     @PostMapping("/chunk")
     public R<String> uploadChunk(@RequestParam("file") MultipartFile file,
                                    @RequestParam("md5") String md5,

@@ -30,6 +30,42 @@ export async function uploadFile(file: File, path = '/'): Promise<FileItem> {
   return apiUpload<FileItem>('/files/upload', fd);
 }
 
+export async function checkHash(md5: string): Promise<{ exists: boolean; size?: number }> {
+  return apiClient<{ exists: boolean; size?: number }>(
+    `/files/check-hash?md5=${encodeURIComponent(md5)}`,
+  );
+}
+
+export async function quickUpload(
+  md5: string,
+  fileName: string,
+  path = '/',
+): Promise<FileItem> {
+  const params = new URLSearchParams({ md5, fileName, path });
+  return apiClient<FileItem>(`/files/quick-upload?${params}`, { method: 'POST' });
+}
+
+export async function uploadChunk(
+  file: Blob,
+  md5: string,
+  index: number,
+): Promise<void> {
+  const fd = new FormData();
+  fd.append('file', file);
+  fd.append('md5', md5);
+  fd.append('index', String(index));
+  await apiUpload<void>(`/files/chunk`, fd);
+}
+
+export async function mergeChunks(
+  md5: string,
+  fileName: string,
+  path = '/',
+): Promise<FileItem> {
+  const params = new URLSearchParams({ md5, fileName, path });
+  return apiClient<FileItem>(`/files/merge?${params}`, { method: 'POST' });
+}
+
 export async function createDirectory(name: string, path = '/'): Promise<FileItem> {
   return apiClient<FileItem>(
     `/files/mkdir?name=${encodeURIComponent(name)}&path=${encodeURIComponent(path)}`,

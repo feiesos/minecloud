@@ -55,6 +55,12 @@ public class AuthController {
         return R.ok(response);
     }
 
+    @PostMapping("/logout")
+    public R<Void> logout(@Valid @RequestBody RefreshRequest request) {
+        authService.logout(request.getRefreshToken());
+        return R.ok();
+    }
+
     @PostMapping("/forgot-password")
     public R<Void> forgotPassword(@Valid @RequestBody ForgotPasswordRequest request,
                                    HttpServletRequest httpRequest) {

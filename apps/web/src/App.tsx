@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import ProtectedRoute from './components/ProtectedRoute';
 import Login from './pages/Login';
@@ -11,6 +12,14 @@ import SharedFile from './pages/SharedFile';
 import FileManager from './pages/FileManager';
 
 export default function App() {
+  useEffect(() => {
+    function handleLogout() {
+      window.location.href = '/login';
+    }
+    window.addEventListener('auth:logout', handleLogout);
+    return () => window.removeEventListener('auth:logout', handleLogout);
+  }, []);
+
   return (
     <BrowserRouter>
       <Routes>

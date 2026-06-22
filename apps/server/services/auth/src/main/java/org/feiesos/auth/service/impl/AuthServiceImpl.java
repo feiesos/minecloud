@@ -306,6 +306,24 @@ public class AuthServiceImpl implements AuthService {
         user.setResetPasswordToken(null);
         user.setResetPasswordTokenExpireAt(null);
         userMapper.updateById(user);
+
+        refreshTokenMapper.revokeAllByUserId(user.getId());
+    }
+
+    @Override
+    @Transactional
+    public void logout(String refreshToken) {
+        SysRefreshToken stored = refreshTokenMapper.findByToken(refreshToken);
+        if (stored != null) {
+            stored.setRevoked(true);
+            refreshTokenMapper.updateById(stored);
+        }
+        // Silently succeed if token is already gone — idempotent
+    }
+
+    @Override
+    public int deleteExpiredRefreshTokens() {
+        return refreshTokenMapper.deleteExpired();
     }
 
     @Override
