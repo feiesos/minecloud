@@ -12,6 +12,7 @@
     <modules>
         <module>storage</module>
         <module>auth</module>
+        <module>share</module>
     </modules>
 
     <artifactId>services</artifactId>

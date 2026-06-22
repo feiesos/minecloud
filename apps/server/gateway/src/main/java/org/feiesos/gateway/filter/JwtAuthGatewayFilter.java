@@ -32,6 +32,10 @@ public class JwtAuthGatewayFilter implements GlobalFilter, Ordered {
             "/api/v1/auth/reset-password"
     );
 
+    private static final List<String> PUBLIC_PATH_PREFIXES = List.of(
+            "/api/v1/share/public/"
+    );
+
     private final JwtTokenProvider jwtTokenProvider;
 
     public JwtAuthGatewayFilter(JwtTokenProvider jwtTokenProvider) {
@@ -49,7 +53,7 @@ public class JwtAuthGatewayFilter implements GlobalFilter, Ordered {
         String token = extractToken(exchange.getRequest());
 
         if (!StringUtils.hasText(token) || !jwtTokenProvider.validateToken(token)) {
-            return unauthorized(exchange, "未认证");
+            return unauthorized(exchange);
         }
 
         JwtClaims claims = jwtTokenProvider.parseToken(token);
@@ -74,7 +78,15 @@ public class JwtAuthGatewayFilter implements GlobalFilter, Ordered {
     }
 
     private boolean isPublicPath(String path) {
-        return PUBLIC_PATHS.contains(path);
+        if (PUBLIC_PATHS.contains(path)) {
+            return true;
+        }
+        for (String prefix : PUBLIC_PATH_PREFIXES) {
+            if (path.startsWith(prefix)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private String extractToken(ServerHttpRequest request) {
@@ -85,10 +97,10 @@ public class JwtAuthGatewayFilter implements GlobalFilter, Ordered {
         return null;
     }
 
-    private static Mono<Void> unauthorized(ServerWebExchange exchange, String msg) {
+    private static Mono<Void> unauthorized(ServerWebExchange exchange) {
         exchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);
         exchange.getResponse().getHeaders().setContentType(MediaType.APPLICATION_JSON);
-        byte[] body = ("{\"code\":401,\"msg\":\"" + msg + "\"}").getBytes(StandardCharsets.UTF_8);
+        byte[] body = "{\"code\":401,\"msg\":\"未认证\"}".getBytes(StandardCharsets.UTF_8);
         return exchange.getResponse()
                 .writeWith(Mono.just(exchange.getResponse().bufferFactory().wrap(body)));
     }

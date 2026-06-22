@@ -1,0 +1,279 @@
+/* 分享管理页面样式 */
+.share-page {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-canvas);
+}
+
+.share-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 24px;
+  height: 56px;
+  background: var(--color-bg);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.share-header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.share-header-left svg {
+  width: 22px;
+  height: 22px;
+}
+
+.share-header-left span {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.share-header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+}
+
+.share-header-right span {
+  color: var(--color-text-secondary);
+}
+
+.share-body {
+  flex: 1;
+  padding: 24px;
+}
+
+.share-container {
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.share-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.share-title h2 {
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.btn-refresh {
+  padding: 5px 16px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+}
+
+.btn-refresh:hover {
+  background: var(--color-border-muted);
+}
+
+.share-error {
+  background: var(--color-error-bg);
+  border: 1px solid var(--color-error-border);
+  color: var(--color-error);
+  border-radius: var(--radius);
+  padding: 12px;
+  margin-bottom: 16px;
+}
+
+.share-empty {
+  text-align: center;
+  padding: 48px 24px;
+  color: var(--color-text-secondary);
+}
+
+.share-empty-tip {
+  font-size: 14px;
+  margin-top: 8px;
+  color: var(--color-text-tertiary);
+}
+
+.share-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.share-item {
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 16px;
+}
+
+.share-item-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.share-token {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--color-accent);
+}
+
+.share-badge {
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 12px;
+}
+
+.share-badge.expired {
+  background: var(--color-error-bg);
+  color: var(--color-error);
+}
+
+.share-badge.password {
+  background: var(--color-warning-bg);
+  color: var(--color-warning);
+}
+
+.share-item-info {
+  margin-bottom: 12px;
+}
+
+.share-info-row {
+  display: flex;
+  gap: 8px;
+  font-size: 14px;
+  margin-bottom: 4px;
+}
+
+.share-label {
+  color: var(--color-text-secondary);
+  min-width: 80px;
+}
+
+.share-item-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.btn-copy {
+  padding: 5px 16px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #ffffff;
+  background: #1f883d;
+  border: 1px solid rgba(31, 35, 40, 0.15);
+  border-radius: var(--radius);
+}
+
+.btn-copy:hover {
+  background: #197935;
+}
+
+.btn-delete {
+  padding: 5px 16px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--color-error);
+  background: transparent;
+  border: 1px solid var(--color-error-border);
+  border-radius: var(--radius);
+}
+
+.btn-delete:hover {
+  background: var(--color-error-bg);
+}
+
+/* 公开分享页面样式 */
+.share-public-page {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: var(--color-canvas);
+}
+
+.share-public-wrapper {
+  width: 100%;
+  max-width: 480px;
+}
+
+.share-public-header {
+  text-align: center;
+  margin-bottom: 24px;
+}
+
+.share-public-header svg {
+  width: 48px;
+  height: 48px;
+  color: var(--color-text);
+}
+
+.share-public-header h1 {
+  font-size: 24px;
+  font-weight: 300;
+  letter-spacing: -0.5px;
+  margin-top: 16px;
+}
+
+.share-public-card {
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 24px;
+}
+
+.share-public-info {
+  margin-bottom: 16px;
+}
+
+.share-password-tip {
+  text-align: center;
+  color: var(--color-text-secondary);
+  margin-bottom: 16px;
+}
+
+.share-public-error {
+  text-align: center;
+  padding: 24px;
+}
+
+.share-public-error h2 {
+  font-size: 20px;
+  margin-bottom: 8px;
+}
+
+.share-public-error p {
+  color: var(--color-text-secondary);
+}
+
+.btn-download {
+  display: block;
+  width: 100%;
+  padding: 8px 16px;
+  font-size: 16px;
+  font-weight: 500;
+  color: #ffffff;
+  background: #1f883d;
+  border: 1px solid rgba(31, 35, 40, 0.15);
+  border-radius: var(--radius);
+}
+
+.btn-download:hover {
+  background: #197935;
+}
+
+.share-loading {
+  text-align: center;
+  color: var(--color-text-secondary);
+  margin-top: 16px;
+}
