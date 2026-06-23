@@ -30,7 +30,8 @@ public class JwtAuthGatewayFilter implements GlobalFilter, Ordered {
             "/api/v1/auth/refresh",
             "/api/v1/auth/logout",
             "/api/v1/auth/forgot-password",
-            "/api/v1/auth/reset-password"
+            "/api/v1/auth/reset-password",
+            "/api/v1/auth/validate-reset-token"
     );
 
     private static final List<String> PUBLIC_PATH_PREFIXES = List.of(

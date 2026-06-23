@@ -64,6 +64,15 @@ export async function forgotPassword(email: string): Promise<void> {
   });
 }
 
+export async function validateResetToken(token: string): Promise<boolean> {
+  const res = await fetch(`/api/v1/auth/validate-reset-token?token=${encodeURIComponent(token)}`);
+  if (!res.ok) {
+    return false;
+  }
+  const json = await res.json();
+  return json.code === 200 && json.data === true;
+}
+
 export async function resetPassword(token: string, newPassword: string): Promise<void> {
   await apiClient('/auth/reset-password', {
     method: 'POST',

@@ -21,6 +21,8 @@ public interface AuthService {
 
     void forgotPassword(String email, String clientIp);
 
+    boolean validateResetToken(String token);
+
     void resetPassword(String token, String newPassword);
 
     void logout(String refreshToken);

@@ -69,6 +69,12 @@ public class AuthController {
         return R.ok();
     }
 
+    @GetMapping("/validate-reset-token")
+    public R<Boolean> validateResetToken(@RequestParam String token) {
+        boolean valid = authService.validateResetToken(token);
+        return R.ok(valid);
+    }
+
     @PostMapping("/reset-password")
     public R<Void> resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
         authService.resetPassword(request.getToken(), request.getNewPassword());

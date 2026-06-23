@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
-import { resetPassword } from '../api/auth';
+import { resetPassword, validateResetToken } from '../api/auth';
 import Logo from '../components/Logo';
 import './AuthPage.css';
 
@@ -12,6 +12,37 @@ export default function ResetPassword() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [validating, setValidating] = useState(true);
+  const [tokenValid, setTokenValid] = useState(false);
+  const initializedRef = useRef(false);
+
+  const validateToken = useCallback(async () => {
+    if (!token) {
+      setValidating(false);
+      setTokenValid(false);
+      return;
+    }
+    setValidating(true);
+    try {
+      const valid = await validateResetToken(token);
+      setTokenValid(valid);
+      if (!valid) {
+        setError('重置链接无效或已过期');
+      }
+    } catch (err) {
+      setTokenValid(false);
+      setError('验证链接失败');
+    } finally {
+      setValidating(false);
+    }
+  }, [token]);
+
+  useEffect(() => {
+    if (!initializedRef.current) {
+      initializedRef.current = true;
+      validateToken();
+    }
+  }, [validateToken]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -19,6 +50,14 @@ export default function ResetPassword() {
     if (!np) { setError('请输入新密码'); return; }
     if (np !== np2) { setError('两次密码不一致'); return; }
     if (np.length < 8) { setError('密码至少8位，需包含大小写字母和数字'); return; }
+    // 前端密码强度校验
+    const hasLower = /[a-z]/.test(np);
+    const hasUpper = /[A-Z]/.test(np);
+    const hasDigit = /\d/.test(np);
+    if (!hasLower || !hasUpper || !hasDigit) {
+      setError('密码需包含大小写字母和数字');
+      return;
+    }
     setLoading(true);
     try {
       await resetPassword(token!, np);
@@ -40,8 +79,15 @@ export default function ResetPassword() {
           </div>
 
           <div className="auth-card">
-            {!token ? (
+            {validating ? (
+              <div className="auth-loading" style={{ marginBottom: 0 }}>正在验证链接...</div>
+            ) : !token ? (
               <div className="auth-error" style={{ marginBottom: 0 }}>无效的重置链接。</div>
+            ) : !tokenValid ? (
+              <div className="auth-error" style={{ marginBottom: 0 }}>
+                {error || '重置链接无效或已过期，请重新申请。'}
+                <Link to="/forgot-password" className="auth-link" style={{ marginTop: 16 }}>重新申请重置链接</Link>
+              </div>
             ) : success ? (
               <div className="auth-success" style={{ marginBottom: 0 }}>密码已更新。</div>
             ) : (

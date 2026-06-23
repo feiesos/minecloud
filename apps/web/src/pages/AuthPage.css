@@ -137,6 +137,12 @@
   margin-bottom: 16px;
 }
 
+.auth-loading {
+  text-align: center;
+  color: var(--color-text-secondary);
+  padding: 16px;
+}
+
 .auth-switch {
   margin-top: 16px;
   padding: 16px 20px;

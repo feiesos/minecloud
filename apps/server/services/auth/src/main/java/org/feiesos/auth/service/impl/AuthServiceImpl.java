@@ -1,6 +1,7 @@
 package org.feiesos.auth.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import lombok.extern.slf4j.Slf4j;
 import org.feiesos.api.auth.dto.LoginRequest;
 import org.feiesos.api.auth.dto.LoginResponse;
 import org.feiesos.api.auth.dto.RegisterRequest;
@@ -31,6 +32,7 @@ import java.util.UUID;
 import java.util.regex.Pattern;
 
 @Service
+@Slf4j
 public class AuthServiceImpl implements AuthService {
 
     private static final Pattern PASSWORD_PATTERN =
@@ -283,6 +285,24 @@ public class AuthServiceImpl implements AuthService {
         rateLimitService.recordAttempt(fpKey);
 
         emailService.sendPasswordResetEmail(user.getEmail(), user.getUsername(), user.getResetPasswordToken());
+    }
+
+    @Override
+    public boolean validateResetToken(String token) {
+        log.info("验证重置令牌: {}", token);
+        SysUser user = userMapper.findByResetPasswordToken(token);
+        if (user == null) {
+            log.warn("未找到用户，令牌无效");
+            return false;
+        }
+        log.info("找到用户: {}, 令牌过期时间: {}", user.getUsername(), user.getResetPasswordTokenExpireAt());
+        if (user.getResetPasswordTokenExpireAt() != null
+                && user.getResetPasswordTokenExpireAt().isBefore(OffsetDateTime.now())) {
+            log.warn("令牌已过期");
+            return false;
+        }
+        log.info("令牌有效");
+        return true;
     }
 
     @Override
