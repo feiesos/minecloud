@@ -10,6 +10,7 @@ import Home from './pages/Home';
 import ShareManage from './pages/ShareManage';
 import SharedFile from './pages/SharedFile';
 import FileManager from './pages/FileManager';
+import RecycleBin from './pages/RecycleBin';
 import AdminDashboard from './pages/AdminDashboard';
 import AdminUsers from './pages/AdminUsers';
 import AdminRoles from './pages/AdminRoles';
@@ -39,6 +40,7 @@ export default function App() {
           <Route path="/" element={<Home />} />
           <Route path="/files" element={<FileManager />} />
           <Route path="/shares" element={<ShareManage />} />
+          <Route path="/recycle" element={<RecycleBin />} />
           {/* 管理后台路由 */}
           <Route path="/admin" element={<AdminDashboard />} />
           <Route path="/admin/users" element={<AdminUsers />} />

@@ -64,6 +64,17 @@
 .fm-actions {
   display: flex;
   gap: 8px;
+  align-items: center;
+}
+
+.fm-recycle-link {
+  text-decoration: none;
+  color: var(--color-text-secondary);
+}
+
+.fm-recycle-link:hover {
+  color: var(--color-error);
+  background: var(--color-error-bg);
 }
 
 /* ─── Buttons ─── */
