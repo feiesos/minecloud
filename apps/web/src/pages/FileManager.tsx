@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { logout } from '../api/auth';
 import type { FileItem } from '../api/files';
 import {
@@ -316,6 +316,9 @@ export default function FileManager() {
             </nav>
 
             <div className="fm-actions">
+              <Link to="/recycle" className="fm-btn fm-btn-action fm-recycle-link">
+                <TrashIcon size={14} />回收站
+              </Link>
               <button
                 className="fm-btn fm-btn-action"
                 onClick={() => uploadRef.current?.click()}

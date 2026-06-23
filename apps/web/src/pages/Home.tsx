@@ -5,6 +5,7 @@ import { getDashboard } from '../api/admin';
 import AppHeader from '../components/AppHeader';
 import DirIcon from '../components/DirIcon';
 import FileIcon from '../components/FileIcon';
+import TrashIcon from '../components/icons/TrashIcon';
 import './Home.css';
 
 export default function Home() {
@@ -50,6 +51,11 @@ export default function Home() {
             <DirIcon size={32} />
             <h3>分享管理</h3>
             <p>查看和管理已分享的文件链接</p>
+          </Link>
+          <Link to="/recycle" className="home-card">
+            <TrashIcon size={32} />
+            <h3>回收站</h3>
+            <p>恢复或永久删除已移除的文件</p>
           </Link>
           {isAdmin && (
             <Link to="/admin" className="home-card admin-card">
