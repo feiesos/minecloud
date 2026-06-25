@@ -7,6 +7,8 @@ import { ThemedText } from '@/components/themed-text';
 import { Spacing, MaxContentWidth } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { listFiles, type FileItem } from '@/api/files';
+import DirIcon from '@/components/icons/DirIcon';
+import FileIcon from '@/components/icons/FileIcon';
 
 interface Breadcrumb {
   id: string;
@@ -84,7 +86,9 @@ export default function FileBrowser() {
           }
         }}
       >
-        <ThemedText style={styles.itemIcon}>{item.isDir ? '📁' : '📄'}</ThemedText>
+        <ThemedView style={styles.itemIcon}>
+          {item.isDir ? <DirIcon size={22} /> : <FileIcon name={item.name} size={22} />}
+        </ThemedView>
         <ThemedView style={styles.itemInfo}>
           <ThemedText style={styles.itemName} numberOfLines={1}>{item.name}</ThemedText>
           <ThemedText style={styles.itemMeta}>
@@ -212,8 +216,9 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   itemIcon: {
-    fontSize: 20,
-    marginRight: Spacing.two,
+    width: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   itemInfo: {
     flex: 1,
