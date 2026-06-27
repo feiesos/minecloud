@@ -1,6 +1,5 @@
 import { tokenStore } from './tokenStore';
-
-const BASE_URL = '/api/v1';
+import { API_BASE_URL } from '../constants';
 
 let isRefreshing = false;
 let refreshPromise: Promise<boolean> | null = null;
@@ -10,7 +9,7 @@ async function tryRefresh(): Promise<boolean> {
   if (!refreshToken) return false;
 
   try {
-    const res = await fetch(`${BASE_URL}/auth/refresh`, {
+    const res = await fetch(`${API_BASE_URL}/auth/refresh`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ refreshToken }),
@@ -55,14 +54,14 @@ export async function apiClient<T = unknown>(
     delete headers['Content-Type'];
   }
 
-  let res = await fetch(`${BASE_URL}${path}`, { ...options, headers });
+  let res = await fetch(`${API_BASE_URL}${path}`, { ...options, headers });
 
   if (res.status === 401 && accessToken) {
     const refreshed = await refreshAccessToken();
     if (refreshed) {
       const newToken = tokenStore.getAccessToken();
       headers['Authorization'] = `Bearer ${newToken}`;
-      res = await fetch(`${BASE_URL}${path}`, { ...options, headers });
+      res = await fetch(`${API_BASE_URL}${path}`, { ...options, headers });
     } else {
       tokenStore.clear();
       window.dispatchEvent(new Event('auth:logout'));

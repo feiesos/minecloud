@@ -1,7 +1,6 @@
 import { apiClient, apiUpload } from './client';
 import { tokenStore } from './tokenStore';
-
-const BASE_URL = '/api/v1';
+import { API_BASE_URL } from '../constants';
 
 export interface FileItem {
   id: string;
@@ -103,12 +102,12 @@ export async function deleteFile(id: string): Promise<void> {
 }
 
 export function getDownloadUrl(id: string): string {
-  return `/api/v1/files/download/${id}`;
+  return `${API_BASE_URL}/files/download/${id}`;
 }
 
 export async function downloadFile(id: string, filename: string): Promise<void> {
   const token = tokenStore.getAccessToken();
-  const res = await fetch(`${BASE_URL}/files/download/${id}`, {
+  const res = await fetch(`${API_BASE_URL}/files/download/${id}`, {
     headers: token ? { Authorization: `Bearer ${token}` } : {},
   });
   if (!res.ok) {
@@ -127,7 +126,7 @@ export async function downloadFile(id: string, filename: string): Promise<void> 
 
 export async function fetchPreviewBlobUrl(id: string): Promise<string> {
   const token = tokenStore.getAccessToken();
-  const res = await fetch(`${BASE_URL}/files/${id}/preview`, {
+  const res = await fetch(`${API_BASE_URL}/files/${id}/preview`, {
     headers: token ? { Authorization: `Bearer ${token}` } : {},
   });
   if (!res.ok) {
@@ -139,7 +138,7 @@ export async function fetchPreviewBlobUrl(id: string): Promise<string> {
 
 export async function fetchPreviewText(id: string): Promise<string> {
   const token = tokenStore.getAccessToken();
-  const res = await fetch(`${BASE_URL}/files/${id}/preview`, {
+  const res = await fetch(`${API_BASE_URL}/files/${id}/preview`, {
     headers: token ? { Authorization: `Bearer ${token}` } : {},
   });
   if (!res.ok) {
