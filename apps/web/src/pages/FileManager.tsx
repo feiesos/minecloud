@@ -4,19 +4,15 @@ import { logout } from '../api/auth';
 import type { FileItem } from '../api/files';
 import {
   listFiles,
-  uploadFile,
   createDirectory,
   renameFile,
   deleteFile,
   downloadFile,
-  quickUpload,
-  uploadChunk,
-  mergeChunks,
   batchDelete,
   batchMove,
   batchCopy,
 } from '../api/files';
-import { computeMD5 } from '../utils/hash';
+import { useUpload } from '../hooks/useUpload';
 import { searchFiles, type SearchResult, type SearchParams } from '../api/search';
 import AppHeader from '../components/AppHeader';
 import DirIcon from '../components/DirIcon';
@@ -48,8 +44,7 @@ export default function FileManager() {
     { id: '0', name: 'root' },
   ]);
 
-  const [uploading, setUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState('');
+  const { upload: uploadFileAction, uploading, uploadProgress } = useUpload();
   const [showNewFolder, setShowNewFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
   const [renaming, setRenaming] = useState<{ id: string; name: string } | null>(null);
@@ -251,42 +246,14 @@ export default function FileManager() {
   async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    setUploading(true);
     setError('');
-    setUploadProgress('计算哈希中…');
     try {
       const currentPath = '/' + breadcrumb.slice(1).map((s) => s.name).join('/');
-      const md5 = await computeMD5(file);
-
-      if (file.size <= 100 * 1024 * 1024) {
-        await uploadFile(file, currentPath, md5);
-        await reloadFiles();
-        return;
-      }
-
-      setUploadProgress('检测中…');
-      try {
-        await quickUpload(md5, file.name, currentPath);
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : '';
-        if (!msg.includes('未找到匹配的文件哈希')) throw err;
-        const CHUNK_SIZE = 5 * 1024 * 1024;
-        const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
-        for (let i = 0; i < totalChunks; i++) {
-          setUploadProgress(`上传中 ${i + 1}/${totalChunks}`);
-          const start = i * CHUNK_SIZE;
-          const end = Math.min(start + CHUNK_SIZE, file.size);
-          await uploadChunk(file.slice(start, end), md5, i);
-        }
-        setUploadProgress('合并中…');
-        await mergeChunks(md5, file.name, currentPath);
-      }
+      await uploadFileAction(file, currentPath);
       await reloadFiles();
     } catch (err) {
       setError(err instanceof Error ? err.message : '上传失败');
     } finally {
-      setUploading(false);
-      setUploadProgress('');
       if (uploadRef.current) uploadRef.current.value = '';
     }
   }
