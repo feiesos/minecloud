@@ -2,6 +2,8 @@ package org.feiesos.storage.backend;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.feiesos.common.exception.BusinessException;
 import org.feiesos.storage.config.StorageProperties;
 import org.feiesos.storage.entity.FileNode;
@@ -10,8 +12,12 @@ import org.feiesos.storage.mapper.FileNodeMapper;
 import org.feiesos.storage.service.AuthzService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -20,27 +26,36 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 
 @Component
 public class StorageFacade {
 
     private static final Logger log = LoggerFactory.getLogger(StorageFacade.class);
+    private static final String CACHE_PREFIX = "file:list-by-parent:";
 
     private final AuthzService authzService;
     private final StorageRouter router;
     private final FileNodeMapper fileNodeMapper;
     private final StorageProperties storageProperties;
+    private final ObjectMapper objectMapper;
 
     public StorageFacade(AuthzService authzService, StorageRouter router,
-                         FileNodeMapper fileNodeMapper, StorageProperties storageProperties) {
+                         FileNodeMapper fileNodeMapper, StorageProperties storageProperties, ObjectMapper objectMapper) {
         this.authzService = authzService;
         this.router = router;
         this.fileNodeMapper = fileNodeMapper;
         this.storageProperties = storageProperties;
+        this.objectMapper = objectMapper;
     }
+
+    @Autowired
+    private StringRedisTemplate redisTemplate;
 
     public Long resolvePathToId(String path, Long userId) {
         if (path == null || path.equals("/") || path.isEmpty()) {
@@ -68,12 +83,42 @@ public class StorageFacade {
 
     public List<FileNode> listByParent(Long parentId, Long userId) {
         authzService.checkPermission(userId, "file:read");
-        return fileNodeMapper.selectList(new LambdaQueryWrapper<FileNode>()
+
+        String cacheKey = CACHE_PREFIX + userId + ":" + parentId;
+
+        try {
+            String cachedJson = redisTemplate.opsForValue().get(cacheKey);
+            if (cachedJson != null) {
+                log.debug("命中缓存：" + cacheKey);
+                return objectMapper.readValue(
+                        cachedJson,
+                        objectMapper.getTypeFactory().constructCollectionType(List.class, FileNode.class)
+                );
+            }
+        } catch (JsonProcessingException e) {
+            log.error("缓存反序列化失败, key={}", cacheKey, e);
+            redisTemplate.delete(cacheKey);
+        }
+
+        // 未命中或缓存损坏
+        List<FileNode> list = fileNodeMapper.selectList(new LambdaQueryWrapper<FileNode>()
                 .eq(FileNode::getParentId, parentId)
                 .eq(FileNode::getOwnerId, userId)
                 .eq(FileNode::getIsDeleted, false)
                 .orderByDesc(FileNode::getIsDir)
                 .orderByDesc(FileNode::getCreateTime));
+
+        // 写入缓存
+        try {
+            String json = list.isEmpty() ? "[]" : objectMapper.writeValueAsString(list);
+            long ttl = list.isEmpty() ? 30 : 60;
+            TimeUnit unit = list.isEmpty() ? TimeUnit.SECONDS : TimeUnit.MINUTES;
+            redisTemplate.opsForValue().set(cacheKey, json, ttl, unit);
+        } catch (JsonProcessingException e) {
+            log.error("缓存写入失败, key={}", cacheKey, e);
+        }
+
+        return list;
     }
 
     public List<FileNode> browse(String path, Long userId) {
@@ -102,11 +147,6 @@ public class StorageFacade {
     }
 
     @Transactional
-    public FileNode upload(String name, Long parentId, Long userId, InputStream data, long size) {
-        return upload(name, parentId, userId, data, size, null);
-    }
-
-    @Transactional
     public FileNode upload(String name, Long parentId, Long userId, InputStream data, long size, String md5) {
         authzService.checkPermission(userId, "file:write");
 
@@ -118,59 +158,52 @@ public class StorageFacade {
             throw new BusinessException("该目录下已存在同名文件: " + name);
         }
 
+        // md5 匹配到已有文件，直接复用存储路径
         if (md5 != null) {
             FileNode existing = fileNodeMapper.selectOne(new LambdaQueryWrapper<FileNode>()
                     .eq(FileNode::getFileHash, md5)
-                    .eq(FileNode::getOwnerId, userId)
                     .eq(FileNode::getIsDir, false)
                     .eq(FileNode::getIsDeleted, false)
                     .last("LIMIT 1"));
             if (existing != null) {
-                StorageBackend backend = router.route(existing);
-                StorageObject obj = backend.read(existing.getStoragePath());
-                String newStoragePath = UUID.randomUUID().toString() + "_" + name;
-                try {
-                    backend.write(newStoragePath, obj.getInputStream(), obj.getSize());
-                } finally {
-                    try { obj.close(); } catch (IOException ignored) {}
-                }
-
-                FileNode node = new FileNode();
-                node.setName(name);
-                node.setParentId(parentId);
-                node.setIsDir(false);
-                node.setSize(existing.getSize());
-                node.setFileHash(md5);
-                node.setStoragePath(newStoragePath);
-                node.setStorageType(backend.type().name());
-                node.setOwnerId(userId);
-                node.setCreateTime(LocalDateTime.now());
+                FileNode node = buildFileNode(name, parentId, userId,
+                        existing.getSize(), md5,
+                        existing.getStoragePath(), existing.getStorageType());
                 fileNodeMapper.insert(node);
+                log.info("秒传命中, md5={}, storagePath={}", md5, existing.getStoragePath());
+                evictAfterCommit(userId, parentId);
                 return node;
             }
         }
 
-        String storagePath = UUID.randomUUID().toString() + "_" + name;
+        // 普通上传
+        String storagePath = UUID.randomUUID() + "_" + name;
         StorageBackend backend = router.defaultBackend();
         try {
             backend.write(storagePath, data, size);
         } finally {
-            try { data.close(); } catch (IOException ignored) {}
+            try { data.close(); } catch (IOException e) { log.error(e.getMessage()); }
         }
 
+        FileNode node = buildFileNode(name, parentId, userId,
+                size, md5, storagePath, backend.type().name());
+        fileNodeMapper.insert(node);
+        evictAfterCommit(userId, parentId);
+        return node;
+    }
+
+    private FileNode buildFileNode(String name, Long parentId, Long userId,
+                                   long size, String md5, String storagePath, String storageType) {
         FileNode node = new FileNode();
         node.setName(name);
         node.setParentId(parentId);
+        node.setOwnerId(userId);
         node.setIsDir(false);
         node.setSize(size);
+        node.setFileHash(md5);
         node.setStoragePath(storagePath);
-        node.setStorageType(backend.type().name());
-        if (md5 != null) {
-            node.setFileHash(md5);
-        }
-        node.setOwnerId(userId);
+        node.setStorageType(storageType);
         node.setCreateTime(LocalDateTime.now());
-        fileNodeMapper.insert(node);
         return node;
     }
 
@@ -181,51 +214,6 @@ public class StorageFacade {
                 .eq(FileNode::getIsDir, false)
                 .eq(FileNode::getIsDeleted, false)
                 .last("LIMIT 1"));
-    }
-
-    @Transactional
-    public FileNode quickUpload(String md5, String fileName, Long parentId, Long userId) {
-        authzService.checkPermission(userId, "file:write");
-
-        FileNode existing = fileNodeMapper.selectOne(new LambdaQueryWrapper<FileNode>()
-                .eq(FileNode::getFileHash, md5)
-                .eq(FileNode::getOwnerId, userId)
-                .eq(FileNode::getIsDir, false)
-                .eq(FileNode::getIsDeleted, false)
-                .last("LIMIT 1"));
-        if (existing == null) {
-            return null;
-        }
-
-        Long count = fileNodeMapper.selectCount(new LambdaQueryWrapper<FileNode>()
-                .eq(FileNode::getParentId, parentId)
-                .eq(FileNode::getName, fileName)
-                .eq(FileNode::getIsDeleted, false));
-        if (count > 0) {
-            throw new BusinessException("该目录下已存在同名文件: " + fileName);
-        }
-
-        StorageBackend backend = router.route(existing);
-        StorageObject obj = backend.read(existing.getStoragePath());
-        String newStoragePath = UUID.randomUUID().toString() + "_" + fileName;
-        try {
-            backend.write(newStoragePath, obj.getInputStream(), obj.getSize());
-        } finally {
-            try { obj.close(); } catch (IOException ignored) {}
-        }
-
-        FileNode node = new FileNode();
-        node.setName(fileName);
-        node.setParentId(parentId);
-        node.setIsDir(false);
-        node.setSize(existing.getSize());
-        node.setFileHash(md5);
-        node.setStoragePath(newStoragePath);
-        node.setStorageType(backend.type().name());
-        node.setOwnerId(userId);
-        node.setCreateTime(LocalDateTime.now());
-        fileNodeMapper.insert(node);
-        return node;
     }
 
     public void uploadChunk(String md5, int index, Long userId, InputStream data, long size) {
@@ -250,7 +238,7 @@ public class StorageFacade {
         }
 
         List<String> chunkPaths = backend.list(tempPrefix);
-        if (chunkPaths.isEmpty()) {
+        if (chunkPaths.isEmpty()) {uuu
             throw new BusinessException("合并失败：未找到任何分片");
         }
 
@@ -305,6 +293,7 @@ public class StorageFacade {
         node.setOwnerId(userId);
         node.setCreateTime(LocalDateTime.now());
         fileNodeMapper.insert(node);
+        evictAfterCommit(userId, parentId);
         return node;
     }
 
@@ -319,6 +308,8 @@ public class StorageFacade {
             throw new BusinessException(403, "无权删除该文件");
         }
 
+        Long parentId = node.getParentId();
+
         if (node.getIsDir()) {
             deleteChildrenRecursively(node.getId());
         } else {
@@ -331,6 +322,8 @@ public class StorageFacade {
                         .eq(FileNode::getId, node.getId())
                         .set(FileNode::getIsDeleted, true)
                         .set(FileNode::getDeleteTime, LocalDateTime.now()));
+
+        evictAfterCommit(userId, parentId);
     }
 
     private void deleteChildrenRecursively(Long parentId) {
@@ -349,6 +342,9 @@ public class StorageFacade {
                             .eq(FileNode::getId, child.getId())
                             .set(FileNode::getIsDeleted, true)
                             .set(FileNode::getDeleteTime, LocalDateTime.now()));
+            if (child.getIsDir()) {
+                evictAfterCommit(child.getOwnerId(), child.getId());
+            }
         }
     }
 
@@ -371,6 +367,7 @@ public class StorageFacade {
         node.setOwnerId(userId);
         node.setCreateTime(LocalDateTime.now());
         fileNodeMapper.insert(node);
+        evictAfterCommit(userId, parentId);
         return node;
     }
 
@@ -396,6 +393,11 @@ public class StorageFacade {
         }
         assertOwnership(node, userId);
 
+        Long oldParentId = node.getParentId();
+        if (Objects.equals(oldParentId, targetParentId)) {
+            return node;
+        }
+
         validateTargetParent(targetParentId, userId);
 
         if (Boolean.TRUE.equals(node.getIsDir())) {
@@ -411,6 +413,10 @@ public class StorageFacade {
 
         node.setParentId(targetParentId);
         fileNodeMapper.updateById(node);
+
+        evictAfterCommit(userId, oldParentId);
+        evictAfterCommit(userId, targetParentId);
+
         return fileNodeMapper.selectById(fileId);
     }
 
@@ -429,10 +435,14 @@ public class StorageFacade {
         validateTargetParent(targetParentId, userId);
         checkNameConflict(source.getName(), targetParentId, null, userId);
 
+        FileNode result;
         if (Boolean.TRUE.equals(source.getIsDir())) {
-            return copyDirectory(source, targetParentId, userId);
+            result = copyDirectory(source, targetParentId, userId);
+        } else {
+            result = copyFile(source, targetParentId, userId);
         }
-        return copyFile(source, targetParentId, userId);
+        evictAfterCommit(userId, targetParentId);
+        return result;
     }
 
     @Transactional
@@ -445,20 +455,26 @@ public class StorageFacade {
         }
         assertOwnership(node, userId);
 
-        checkNameConflict(newName, node.getParentId(), fileId, userId);
+        Long parentId = node.getParentId();
+        checkNameConflict(newName, parentId, fileId, userId);
 
         node.setName(newName);
         fileNodeMapper.updateById(node);
+
+        evictAfterCommit(userId, parentId);
+
         return fileNodeMapper.selectById(fileId);
     }
 
     @Transactional
     public void batchDelete(List<Long> fileIds, Long userId) {
         authzService.checkPermission(userId, "file:delete");
+        Set<Long> parentIds = new HashSet<>();
         for (Long id : fileIds) {
             FileNode node = fileNodeMapper.selectById(id);
             if (node == null) continue;
             if (!userId.equals(node.getOwnerId())) continue;
+            parentIds.add(node.getParentId());
             if (node.getIsDir()) {
                 deleteChildrenRecursively(node.getId());
             } else {
@@ -471,6 +487,9 @@ public class StorageFacade {
                             .set(FileNode::getIsDeleted, true)
                             .set(FileNode::getDeleteTime, LocalDateTime.now()));
         }
+        for (Long pid : parentIds) {
+            evictAfterCommit(userId, pid);
+        }
     }
 
     @Transactional
@@ -478,6 +497,7 @@ public class StorageFacade {
         authzService.checkPermission(userId, "file:write");
         validateTargetParent(targetParentId, userId);
         List<FileNode> moved = new ArrayList<>();
+        Set<Long> oldParentIds = new HashSet<>();
         for (Long id : fileIds) {
             FileNode node = fileNodeMapper.selectById(id);
             if (node == null) continue;
@@ -491,10 +511,15 @@ public class StorageFacade {
             } catch (BusinessException e) {
                 continue;
             }
+            oldParentIds.add(node.getParentId());
             node.setParentId(targetParentId);
             fileNodeMapper.updateById(node);
             moved.add(fileNodeMapper.selectById(id));
         }
+        for (Long oldPid : oldParentIds) {
+            evictAfterCommit(userId, oldPid);
+        }
+        evictAfterCommit(userId, targetParentId);
         return moved;
     }
 
@@ -518,6 +543,7 @@ public class StorageFacade {
                 copied.add(copyFile(source, targetParentId, userId));
             }
         }
+        evictAfterCommit(userId, targetParentId);
         return copied;
     }
 
@@ -638,5 +664,32 @@ public class StorageFacade {
             tempDir = tempDir.substring(0, tempDir.length() - 1);
         }
         return tempDir + "/" + userId;
+    }
+
+    private void evictListCache(Long userId, Long parentId) {
+        String key = CACHE_PREFIX + userId + ":" + parentId;
+        redisTemplate.delete(key);
+    }
+
+    private void evictUserCache(Long userId) {
+        Set<String> keys = redisTemplate.keys(CACHE_PREFIX + userId + ":*");
+        if (keys != null && !keys.isEmpty()) {
+            redisTemplate.delete(keys);
+        }
+    }
+
+    private void evictAfterCommit(Long userId, Long parentId) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            evictListCache(userId, parentId);
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(
+            new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    evictListCache(userId, parentId);
+                }
+            }
+        );
     }
 }

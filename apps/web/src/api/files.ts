@@ -39,15 +39,6 @@ export async function checkHash(md5: string): Promise<{ exists: boolean; size?: 
   );
 }
 
-export async function quickUpload(
-  md5: string,
-  fileName: string,
-  path = '/',
-): Promise<FileItem> {
-  const params = new URLSearchParams({ md5, fileName, path });
-  return apiClient<FileItem>(`/files/quick-upload?${params}`, { method: 'POST' });
-}
-
 export async function uploadChunk(
   file: Blob,
   md5: string,
