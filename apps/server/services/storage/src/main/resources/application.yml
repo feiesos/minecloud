@@ -12,6 +12,22 @@ spring:
       enabled: true
       max-file-size: 50MB
       max-request-size: 50MB
+  data:
+    redis:
+      host: ${SPRING_REDIS_HOST:localhost}
+      port: ${SPRING_REDIS_PORT:6379}
+      password: ${SPRING_REDIS_PASSWORD:redis}
+      timeout: 3000ms
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 8
+          min-idle: 2
+          max-wait: 1000ms
+
+  logging:
+    level:
+      org.feiesos.storage.backend: DEBUG
 
 mybatis-plus:
   configuration:

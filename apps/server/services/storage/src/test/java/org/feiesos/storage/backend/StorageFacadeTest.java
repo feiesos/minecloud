@@ -1,6 +1,8 @@
 package org.feiesos.storage.backend;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.feiesos.common.exception.BusinessException;
+import org.feiesos.storage.config.StorageProperties;
 import org.feiesos.storage.dto.StorageObject;
 import org.feiesos.storage.entity.FileNode;
 import org.feiesos.storage.mapper.FileNodeMapper;
@@ -10,6 +12,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.StringRedisTemplate;
 
 import java.io.ByteArrayInputStream;
 
@@ -36,11 +40,17 @@ class StorageFacadeTest {
     @Mock
     private StorageBackend storageBackend;
 
+    @Mock
+    private StorageProperties storageProperties;
+
+    @Mock
+    private ObjectMapper objectMapper;
+
     private StorageFacade storageFacade;
 
     @BeforeEach
     void setUp() {
-        storageFacade = new StorageFacade(authzService, storageRouter, fileNodeMapper);
+        storageFacade = new StorageFacade(authzService, storageRouter, fileNodeMapper, storageProperties, objectMapper);
     }
 
     @Test

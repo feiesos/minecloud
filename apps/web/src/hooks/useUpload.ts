@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { uploadFile, quickUpload, uploadChunk, mergeChunks } from '../api/files';
+import { uploadFile, uploadChunk, mergeChunks } from '../api/files';
 import { computeMD5 } from '../utils/hash';
 import { DIRECT_UPLOAD_MAX_SIZE, UPLOAD_CHUNK_SIZE } from '../constants';
 
@@ -22,15 +22,6 @@ export function useUpload(): UseUploadReturn {
       if (file.size <= DIRECT_UPLOAD_MAX_SIZE) {
         await uploadFile(file, currentPath, md5);
         return;
-      }
-
-      setUploadProgress('检测中…');
-      try {
-        await quickUpload(md5, file.name, currentPath);
-        return;
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : '';
-        if (!msg.includes('未找到匹配的文件哈希')) throw err;
       }
 
       const totalChunks = Math.ceil(file.size / UPLOAD_CHUNK_SIZE);
